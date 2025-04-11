@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="D:\USC SUBJECTS\USC SPRING 2025\CSCI 580 3D graphics and rendering\Elec3D\build\CMakeFiles\917221188bc52f597d4372a6e321f231\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D25AE557-F8E3-3843-8F7F-CB6AEB4B143A}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

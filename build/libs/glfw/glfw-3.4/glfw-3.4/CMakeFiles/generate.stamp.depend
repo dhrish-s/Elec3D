@@ -1,0 +1,16 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-4.0/Modules/BasicConfigVersion-SameMajorVersion.cmake.in
+C:/Program Files/CMake/share/cmake-4.0/Modules/CMakeDependentOption.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/CMakePackageConfigHelpers.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/CheckCSourceCompiles.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/CheckIncludeFile.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/CheckLibraryExists.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/FindPackageMessage.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/FindThreads.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/GNUInstallDirs.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/Internal/CheckSourceCompiles.cmake
+C:/Program Files/CMake/share/cmake-4.0/Modules/WriteBasicConfigVersionFile.cmake
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/libs/glfw/glfw-3.4/glfw-3.4/CMake/cmake_uninstall.cmake.in
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/libs/glfw/glfw-3.4/glfw-3.4/CMake/glfw3Config.cmake.in
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/libs/glfw/glfw-3.4/glfw-3.4/CMakeLists.txt
