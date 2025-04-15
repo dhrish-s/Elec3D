@@ -9,7 +9,13 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
+
 #include <set>  // Required for layer toggle functionality
+
+
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
 
@@ -89,6 +95,11 @@ struct Component {
     std::string type;
     float x,y,z;
     int layer;
+};
+
+struct Connection {
+    int from_id;
+    int to_id;
 };
 
 // Utility function to load, compile, and link shaders
@@ -178,7 +189,7 @@ int main()
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);  // Lock cursor
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);  // unLock cursor and for lock it is GLFW_CURSOR_DISABLED
 
 
     //Load OpenGL function pointers using glad
@@ -186,6 +197,28 @@ int main()
         std::cerr << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
+
+    
+
+    
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+
+    std::cout << "ImGui font atlas built: " << io.Fonts->IsBuilt() << std::endl;
+
+
+    ImGui::StyleColorsDark();  // Optional: use dark theme
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+
+    // Force font texture upload
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    unsigned char* pixels;
+    int width, height;
+    atlas->GetTexDataAsRGBA32(&pixels, &width, &height);
+
 
     #include <filesystem>
     std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
@@ -200,6 +233,9 @@ int main()
     file >> layout;
 
     std::vector<Component> components;
+
+    std::vector<Connection> connections;
+
     for (const auto& item : layout["components"]) {
         Component c;
         c.id = item["id"];
@@ -210,6 +246,13 @@ int main()
         c.layer = item["layer"];
 
         components.push_back(c);
+    }
+
+    for(const auto& pair : layout["connections"]){
+        Connection conn;
+        conn.from_id = pair["from"];
+        conn.to_id = pair["to"];
+        connections.push_back(conn);
     }
 
     for (const auto& c : components) {
@@ -237,6 +280,8 @@ int main()
         1, 2, 6, 6, 5, 1,  // right face
         0, 3, 7, 7, 4, 0   // left face
     };
+
+    // Below is the VAO, VBO, and EBO setup.
 
     //VAO is a Vertex Array Object, VBO is a Vertex Buffer Object, and EBO is an Element Buffer Object
     unsigned int VAO, VBO, EBO;
@@ -267,6 +312,23 @@ int main()
     //unbind the VBO and EBO (not the VAO) to avoid accidental modification
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+    // The cube VAO setup is done. You can now use it to draw the cube.
+
+    //Line VAO/VBO setup
+    unsigned int lineVAO, lineVBO;
+    glGenVertexArrays(1, &lineVAO);
+    glGenBuffers(1, &lineVBO);
+
+    glBindVertexArray(lineVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
+    glBufferData(GL_ARRAY_BUFFER,sizeof(float)*6,nullptr,GL_DYNAMIC_DRAW); // 6 floats for 2 points (3 floats each)
+    
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+    // The line VAO setup is done. You can now use it to draw lines.
+
+
 
 
     unsigned int shaderProgram = LoadShaderProgram("../shaders/cube.vert", "../shaders/cube.frag");
@@ -274,20 +336,29 @@ int main()
     // Enable depth test once, before the loop (you already have this — keep it!)
     glEnable(GL_DEPTH_TEST);
 
+
     // Inside render loop:
     while (!glfwWindowShouldClose(window)) {
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+    
         glClearColor(0.12f, 0.12f, 0.15f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        // -- drawing 3d scene --
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
 
+        //Camera and transformation setup
+        // Set up camera position and orientation based on yaw and pitch angles
         int maxLayer = 0;
         for (const auto& c : components) {
             if (c.layer > maxLayer) maxLayer = c.layer;
         }
 
-        float cameraZ = - (5.0f + maxLayer * 2.0f);  // dynamic distance based on number of components
+        float cameraZ = - (5.0f + maxLayer * 2.0f);  // dynamic distance based on number of components but we arent using this
         float camX = radius * cos(glm::radians(yaw)) * cos(glm::radians(pitch));
         float camY = radius * sin(glm::radians(pitch));
         float camZ = radius * sin(glm::radians(yaw)) * cos(glm::radians(pitch));
@@ -328,6 +399,11 @@ int main()
             else if (c.type == "Diode")     color = glm::vec3(1.0f, 0.0f, 0.0f);
             
             glUniform3fv(colorLoc, 1, glm::value_ptr(color));
+
+            glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(0.8f))); // Light gray
+            float pulse = 0.5f + 0.5f * sin(glfwGetTime() * 3.0f);
+            glUniform1f(glGetUniformLocation(shaderProgram, "brightness"), pulse);
+
             
             //  Animate rotation
             float angle = (float)glfwGetTime();
@@ -343,7 +419,80 @@ int main()
             glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
         }
 
+        // ... [camera/view/model loops and glDrawElements]
         glBindVertexArray(0);
+
+        // the above code draws the cubes. Now we will draw the lines between them.
+
+        glBindVertexArray(lineVAO);
+        for(const auto& conn : connections)
+        {
+            const Component* from = nullptr;
+            const Component* to = nullptr;
+
+            for(const auto& c : components)
+            {
+                if(c.id == conn.from_id) from = &c;
+                if(c.id == conn.to_id) to = &c;
+            }
+            
+            if (!from || !to) continue;
+            if (visibleLayers.count(from->layer) == 0 || visibleLayers.count(to->layer) == 0)
+                continue;
+
+            glm::vec3 fromPos(from->x, from->y + from->layer * 1.0f, from->z);
+            glm::vec3 toPos(to->x, to->y + to->layer * 1.0f, to->z);
+
+            float lineVertices[] = {
+                fromPos.x, fromPos.y, fromPos.z,
+                toPos.x,   toPos.y,   toPos.z
+            };
+
+            glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(lineVertices), lineVertices);
+
+            glm::mat4 model = glm::mat4(1.0f);
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+            glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(0.8f))); // light gray
+            glDrawArrays(GL_LINES, 0, 2);
+        }
+
+        glDisable(GL_DEPTH_TEST); // Important: Disable depth test before ImGui draw
+
+        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(300, 100), ImGuiCond_Always);
+        ImGui::Begin("DEBUG TEST WINDOW", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
+        ImGui::Text("If you see this, ImGui is working");
+        ImGui::Text("Camera Yaw: %.1f", yaw);
+        ImGui::Text("Camera Pitch: %.1f", pitch);
+        ImGui::End();
+
+        // Layer Control Window
+        std::set<int> allLayers;
+        for (const auto& c : components)
+            allLayers.insert(c.layer);
+
+        ImGui::SetNextWindowPos(ImVec2(10, 120), ImGuiCond_Once);
+        ImGui::Begin("Layer Control", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Text("Toggle Layers:");
+        for (int layer : allLayers) {
+            bool isVisible = visibleLayers.count(layer);
+            std::string label = "Layer " + std::to_string(layer);
+            if (ImGui::Checkbox(label.c_str(), &isVisible)) {
+                if (isVisible) visibleLayers.insert(layer);
+                else visibleLayers.erase(layer);
+            }
+        }
+        ImGui::End();
+        
+        bool show_demo = true;
+        ImGui::ShowDemoWindow(&show_demo);
+        
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        
+        glEnable(GL_DEPTH_TEST); // Re-enable depth test for next frame
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -352,6 +501,11 @@ int main()
 
     // Clean up and exit
     glfwDestroyWindow(window);
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
     glfwTerminate();
     return 0;
     
