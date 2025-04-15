@@ -1,28 +1,11 @@
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/CMakeFiles/Elec3D.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/CMakeFiles/edit_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/CMakeFiles/rebuild_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/CMakeFiles/list_install_components.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/CMakeFiles/install.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/CMakeFiles/install/local.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/CMakeFiles/install/strip.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/uninstall.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/edit_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/rebuild_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/list_install_components.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/install.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/install/local.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/install/strip.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/glfw.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/update_mappings.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/edit_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/rebuild_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/list_install_components.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/install.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/install/local.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/install/strip.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/docs/CMakeFiles/edit_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/docs/CMakeFiles/rebuild_cache.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/docs/CMakeFiles/list_install_components.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/docs/CMakeFiles/install.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/docs/CMakeFiles/install/local.dir
-/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/docs/CMakeFiles/install/strip.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/CMakeFiles/Elec3D.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/CMakeFiles/INSTALL.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/CMakeFiles/ALL_BUILD.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/CMakeFiles/ZERO_CHECK.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/uninstall.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/INSTALL.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/CMakeFiles/ALL_BUILD.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/glfw.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/update_mappings.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/src/CMakeFiles/INSTALL.dir
+D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/docs/CMakeFiles/INSTALL.dir

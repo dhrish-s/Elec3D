@@ -1,22 +1,22 @@
 
-if (NOT EXISTS "/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/install_manifest.txt")
-    message(FATAL_ERROR "Cannot find install manifest: \"/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/install_manifest.txt\"")
+if (NOT EXISTS "D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/install_manifest.txt")
+    message(FATAL_ERROR "Cannot find install manifest: \"D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/install_manifest.txt\"")
 endif()
 
-file(READ "/Users/adityaramachandran/Documents/GitHub/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/install_manifest.txt" files)
+file(READ "D:/USC SUBJECTS/USC SPRING 2025/CSCI 580 3D graphics and rendering/Elec3D/build/libs/glfw/glfw-3.4/glfw-3.4/install_manifest.txt" files)
 string(REGEX REPLACE "\n" ";" files "${files}")
 
 foreach (file ${files})
   message(STATUS "Uninstalling \"$ENV{DESTDIR}${file}\"")
   if (EXISTS "$ENV{DESTDIR}${file}")
-    exec_program("/opt/homebrew/bin/cmake" ARGS "-E remove \"$ENV{DESTDIR}${file}\""
+    exec_program("C:/Program Files/CMake/bin/cmake.exe" ARGS "-E remove \"$ENV{DESTDIR}${file}\""
                  OUTPUT_VARIABLE rm_out
                  RETURN_VALUE rm_retval)
     if (NOT "${rm_retval}" STREQUAL 0)
       MESSAGE(FATAL_ERROR "Problem when removing \"$ENV{DESTDIR}${file}\"")
     endif()
   elseif (IS_SYMLINK "$ENV{DESTDIR}${file}")
-    EXEC_PROGRAM("/opt/homebrew/bin/cmake" ARGS "-E remove \"$ENV{DESTDIR}${file}\""
+    EXEC_PROGRAM("C:/Program Files/CMake/bin/cmake.exe" ARGS "-E remove \"$ENV{DESTDIR}${file}\""
                  OUTPUT_VARIABLE rm_out
                  RETURN_VALUE rm_retval)
     if (NOT "${rm_retval}" STREQUAL 0)

@@ -1,8 +1,49 @@
 {
   "components": [
-    { "id": 0, "type": "Resistor", "position": [0.0, 0.0, 0.0], "layer": 1 },
-    { "id": 1, "type": "Capacitor", "position": [2.0, 0.0, 0.0], "layer": 1 },
-    { "id": 2, "type": "Inductor", "position": [0.0, 2.0, 0.0], "layer": 2 },
-    { "id": 3, "type": "Diode", "position": [-2.0, -2.0, 0.0], "layer": 2 }
+    {
+      "id": 0,
+      "type": "Resistor",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "layer": 1
+    },
+    {
+      "id": 1,
+      "type": "Capacitor",
+      "position": [
+        2.0,
+        0.0,
+        0.0
+      ],
+      "layer": 1
+    },
+    {
+      "id": 2,
+      "type": "Inductor",
+      "position": [
+        0.0,
+        2.0,
+        0.0
+      ],
+      "layer": 2
+    },
+    {
+      "id": 3,
+      "type": "Diode",
+      "position": [
+        -2.0,
+        -2.0,
+        0.0
+      ],
+      "layer": 2
+    }
+  ],
+    "connections": [
+    { "from": 0, "to": 1 },
+    { "from": 0, "to": 2 },
+    { "from": 2, "to": 3 }
   ]
 }
