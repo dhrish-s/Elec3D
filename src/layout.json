@@ -39,11 +39,22 @@
         0.0
       ],
       "layer": 2
+    },
+    {
+      "id": 4,
+      "type": "Battery",
+      "position": [
+        0.0,
+        -2.0,
+        0.0
+      ],
+      "layer": 1
     }
   ],
     "connections": [
     { "from": 0, "to": 1 },
     { "from": 0, "to": 2 },
-    { "from": 2, "to": 3 }
+    { "from": 2, "to": 3 },
+    { "from": 4, "to": 0}
   ]
 }
