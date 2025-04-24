@@ -18,6 +18,7 @@ include_directories(
     libs/json/single_include
     libs/glm
     include
+    include/eigen3/eigen-3.4.0/eigen-3.4.0
 
 
 )

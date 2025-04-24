@@ -17,6 +17,8 @@
 #include <set>  // Required for layer toggle functionality
 #include <deque>
 
+#include <Eigen/Dense>
+
 
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
@@ -295,6 +297,76 @@ void SimulateVoltages(const std::vector<Component>& components, const std::vecto
 }
 
 
+
+void SolveKirchhoffVoltages(const std::vector<Component>& components, const std::vector<Connection>& connections) {
+    componentVoltages.clear();
+
+    int N = components.size();
+
+    // === Step 1: Create ID ↔ Index mappings ===
+    std::unordered_map<int, int> idToIndex;
+    std::unordered_map<int, int> indexToId;
+    for (int i = 0; i < N; ++i) {
+        idToIndex[components[i].id] = i;
+        indexToId[i] = components[i].id;
+    }
+
+    // === Step 2: Build matrix A and vector b ===
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(N, N);
+    Eigen::VectorXd b = Eigen::VectorXd::Zero(N);
+
+    // === Step 3: Fill A with conductances (1/R) from connections ===
+    for (const auto& conn : connections) {
+        int i = idToIndex[conn.from_id];
+        int j = idToIndex[conn.to_id];
+
+        float R1 = components[i].resistance;
+        float R2 = components[j].resistance;
+        float R = R1 + R2;  // Total resistance in the path
+        
+        if (R == 0) R = 1.0f;  // Prevent division by zero (fallback)
+        
+        float G = 1.0f / R;  // Conductance
+        
+        A(i, i) += G;
+        A(j, j) += G;
+        A(i, j) -= G;
+        A(j, i) -= G;
+
+    }
+
+    // === Step 4: Set known voltages from batteries ===
+    for (const auto& c : components) {
+        if (c.type == "Battery") {
+            int idx = idToIndex[c.id];
+            A.row(idx).setZero();
+            A(idx, idx) = 1.0;
+            b(idx) = c.voltage;
+        }
+    }
+
+    // === Step 5: Ground one node (node 0 assumed) ===
+    if (idToIndex.count(3)) {
+        int groundIdx = idToIndex[3];
+        A.row(groundIdx).setZero();
+        A(groundIdx, groundIdx) = 1.0;
+
+        
+        b(groundIdx) = 0.0;
+    }
+
+    // === Step 6: Solve Ax = b ===
+    Eigen::VectorXd voltages = A.colPivHouseholderQr().solve(b);
+
+    // === Step 7: Store voltages by original component ID ===
+    for (int i = 0; i < N; ++i) {
+        int id = indexToId[i];
+        componentVoltages[id] = static_cast<float>(voltages(i));
+    }
+}
+
+
+
 int main()
 {
     //intialize GLFW
@@ -490,6 +562,9 @@ int main()
     glBindVertexArray(0);
 
 
+    // The pulse VAO setup is done. You can now use it to draw pulses.
+
+
     glGenVertexArrays(1, &axisVAO);
     glGenBuffers(1, &axisVBO);
 
@@ -559,7 +634,10 @@ int main()
     // Inside render loop:
     while (!glfwWindowShouldClose(window)) {
 
-        SimulateVoltages(components, connections);
+        //SimulateVoltages(components, connections);
+        SolveKirchhoffVoltages(components, connections);
+
+
 
         if(watchedComponentId!=-1)
         {
