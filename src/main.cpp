@@ -18,7 +18,7 @@
 #include <deque>
 
 #include <Eigen/Dense>
-
+#include<unordered_set>
 
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
@@ -297,11 +297,174 @@ void SimulateVoltages(const std::vector<Component>& components, const std::vecto
 }
 
 
+// Now circuit checking and if the circuit is valid
+std::vector<int> FindDisconnectedComponents(const std::vector<Component>& components,
+    const std::vector<Connection>& connections) 
+{
+    std::unordered_set<int> visited;
+    std::unordered_map<int, std::vector<int>> adj;
 
-void SolveKirchhoffVoltages(const std::vector<Component>& components, const std::vector<Connection>& connections) {
+    for (const auto& conn : connections) {
+        adj[conn.from_id].push_back(conn.to_id);
+        adj[conn.to_id].push_back(conn.from_id);  // Assuming undirected connections
+    }// the above for loop is used to create the adjacency list for the graph
+    // in simple words it is used to create the graph from the connections
+    // push_back is used to add the connection to the graph
+    // and the graph is undirected so we add both the connections
+
+    std::function<void(int)> dfs = [&](int node) {
+        visited.insert(node);
+        for (int neighbor : adj[node]) {
+            if (!visited.count(neighbor)) {
+                dfs(neighbor);
+            }
+        }
+    };
+    // the above function is used to perform the depth first search on the graph
+    // it is used to visit all the nodes in the graph and mark them as visited
+    // the function is recursive and it is used to visit all the nodes in the graph
+    // We do DFS on the graph to find all the connected components in the graph
+    // and mark them as visited
+    // and the function is called for each node in the graph
+    
+    if(!components.empty()){
+        dfs(components[0].id);  // Start DFS from the first component
+    }
+    // the above line is used to start the DFS from the first component in the graph
+    // and the first component is used to start the DFS because it is the first component in the graph
+
+    std::vector<int> disconnected;
+    for (const auto& c : components) {
+        if (!visited.count(c.id)) {
+            disconnected.push_back(c.id);  // Add disconnected component ID to the list
+        }
+    }
+    // the above line is used to add the disconnected component ID to the list of disconnected components
+
+    return disconnected;  // Return the list of disconnected components
+
+
+
+}
+
+
+bool HasCycleDFS(int node, int parent,
+    const std::unordered_map<int, std::vector<int>>& adj,
+    std::unordered_set<int>& visited) 
+    {
+        visited.insert(node);
+        for (int neighbor : adj.at(node)) 
+        {
+            if (!visited.count(neighbor)) 
+            {
+                if (HasCycleDFS(neighbor, node, adj, visited))
+                return true;
+            } else if (neighbor != parent) 
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+bool IsCircuitLooped(const std::vector<Component>& components,
+        const std::vector<Connection>& connections) 
+        {
+            std::unordered_map<int, std::vector<int>> adj;
+            for (const auto& conn : connections) 
+            {
+                adj[conn.from_id].push_back(conn.to_id);
+                adj[conn.to_id].push_back(conn.from_id);
+            }
+
+        std::unordered_set<int> visited;
+        for (const auto& c : components) 
+    {
+        if (!visited.count(c.id)) 
+        {
+            if (HasCycleDFS(c.id, -1, adj, visited))
+            return true;
+        }
+    }
+    return false;
+}
+
+std::unordered_set<int> FindLoopedComponents(const std::vector<Component>& components,
+                                             const std::vector<Connection>& connections) {
+    std::unordered_map<int, std::vector<int>> adj;
+    for (const auto& conn : connections) {
+        adj[conn.from_id].push_back(conn.to_id);
+        adj[conn.to_id].push_back(conn.from_id);
+    } // the above line is used to create the adjacency list for the graph
+
+    std::unordered_set<int> visited, inCycle;
+    // the above line is used to create the visited set and the inCycle set
+    // the visited set is used to mark the visited nodes in the graph
+    // and the inCycle set is used to mark the nodes in the cycle
+
+    std::function<bool(int, int, std::vector<int>&)> dfs = [&](int node, int parent, std::vector<int>& path) {
+        visited.insert(node);
+        path.push_back(node);
+        // the above line is used to add the node to the path
+        // and the path is used to store the path of the node in the graph
+        
+
+        for (int neighbor : adj[node]) {
+            if (neighbor == parent) continue;
+            // Skip the parent node to avoid immediate backtracking
+
+            if (!visited.count(neighbor)) {
+                if (dfs(neighbor, node, path))
+                    return true;
+                    // Continue DFS if neighbor is not visited
+            } else {
+                auto it = std::find(path.begin(), path.end(), neighbor);
+                if (it != path.end()) {
+                    for (; it != path.end(); ++it)
+                        inCycle.insert(*it);
+                    inCycle.insert(neighbor);
+                    // Mark all nodes in the cycle
+                    // the for loop is used to add the nodes in the cycle to the inCycle set
+                    //*it is used to get the node in the cycle
+                    // and the inCycle set is used to mark the nodes in the cycle
+                }
+            }
+        }
+
+        path.pop_back();
+        return false;
+    };
+
+    for (const auto& c : components) {
+        if (!visited.count(c.id)) {
+            std::vector<int> path;
+            dfs(c.id, -1, path);
+        }// Start DFS from each unvisited component 
+        //call dfs function to find the cycle in the graph
+    }
+
+    return inCycle;
+}
+
+
+void SolveKirchhoffVoltages(const std::vector<Component>& components, const std::vector<Connection>& connections, int groundId) {
     componentVoltages.clear();
+    
+    auto loopedSet = FindLoopedComponents(components, connections);
 
     int N = components.size();
+
+    // === Step 0: Check for disconnected components ===
+    auto disconnected = FindDisconnectedComponents(components, connections);
+    // if (!disconnected.empty()) {
+    //     std::cerr << "Disconnected components found: ";
+    //     for (int id : disconnected) {
+    //         std::cerr << id << " ";
+    //     }
+    //     std::cerr << std::endl;
+    //     return;  // Early exit if there are disconnected components
+    // }
+    // the above line is used to check for disconnected components in the graph
 
     // === Step 1: Create ID ↔ Index mappings ===
     std::unordered_map<int, int> idToIndex;
@@ -317,6 +480,11 @@ void SolveKirchhoffVoltages(const std::vector<Component>& components, const std:
 
     // === Step 3: Fill A with conductances (1/R) from connections ===
     for (const auto& conn : connections) {
+
+        if (!loopedSet.count(conn.from_id) || !loopedSet.count(conn.to_id))
+        continue;  // skip non-loop parts
+
+
         int i = idToIndex[conn.from_id];
         int j = idToIndex[conn.to_id];
 
@@ -337,7 +505,7 @@ void SolveKirchhoffVoltages(const std::vector<Component>& components, const std:
 
     // === Step 4: Set known voltages from batteries ===
     for (const auto& c : components) {
-        if (c.type == "Battery") {
+        if (c.type == "Battery" && loopedSet.count(c.id)) {
             int idx = idToIndex[c.id];
             A.row(idx).setZero();
             A(idx, idx) = 1.0;
@@ -345,13 +513,11 @@ void SolveKirchhoffVoltages(const std::vector<Component>& components, const std:
         }
     }
 
-    // === Step 5: Ground one node (node 0 assumed) ===
-    if (idToIndex.count(3)) {
-        int groundIdx = idToIndex[3];
+    //  === Step 5: Apply ground constraint based on user selection ===
+    if (idToIndex.count(groundId)) {
+        int groundIdx = idToIndex[groundId];
         A.row(groundIdx).setZero();
         A(groundIdx, groundIdx) = 1.0;
-
-        
         b(groundIdx) = 0.0;
     }
 
@@ -630,13 +796,21 @@ int main()
     static int popupDirection = 0;  // 0 = new -> existing, 1 = existing -> new
     static int popupStrategy = 0;   // 0 = nearest, 1 = first
 
+    static int groundComponentId = 3;
 
     // Inside render loop:
     while (!glfwWindowShouldClose(window)) {
 
-        //SimulateVoltages(components, connections);
-        SolveKirchhoffVoltages(components, connections);
+        std::vector<int> disconnectedNow = FindDisconnectedComponents(components, connections);
+        bool hasCycle = IsCircuitLooped(components, connections);
+        auto loopedSet = FindLoopedComponents(components, connections);
 
+        
+        // Only solve if circuit is connected AND has a loop
+        if (disconnectedNow.empty() && hasCycle) {
+            SolveKirchhoffVoltages(components, connections, groundComponentId);
+        }
+        
 
 
         if(watchedComponentId!=-1)
@@ -843,6 +1017,11 @@ int main()
             
             if (!from || !to) continue;
 
+            if (!loopedSet.count(from->id) || !loopedSet.count(to->id))
+                continue;
+            // the above condition is used to check if the component is in the looped set or not    
+
+
             bool fromVisible = visibleLayers.count(from->layer);
             bool toVisible = visibleLayers.count(to->layer);
 
@@ -878,6 +1057,10 @@ int main()
             int connKey = from->id * 1000 + to->id;
             if (!signalEnabled[connKey]) continue;  // Skip if disabled
 
+            std::vector<glm::vec3> pulsePoints;
+            std::vector<float> pulseBrightness;
+
+            if (disconnectedNow.empty() && hasCycle) {
             auto& trail = pulseTrails[connKey];
 
             // === PULSE SIGNAL === (Now using separate VAO/VBO)
@@ -894,18 +1077,18 @@ int main()
             trail.erase(std::remove_if(trail.begin(), trail.end(),
                 [](const PulseTrail& p) { return p.age > 1.0f; }), trail.end());
 
-                
+            
             
             glBindVertexArray(pulseVAO);
             glDisable(GL_DEPTH_TEST);
             // Step 1: Prepare data
-            std::vector<glm::vec3> pulsePoints;
-            std::vector<float> pulseBrightness;
+     
 
             for (const auto& pt : trail) {
                 pulsePoints.push_back(pt.pos);
                 pulseBrightness.push_back(1.0f - pt.age);  // brightness for each point
             }
+        }
 
             // Step 2: Upload all positions
             glBindVertexArray(pulseVAO);
@@ -916,7 +1099,8 @@ int main()
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
             glEnableVertexAttribArray(0);
 
-            // Step 3: Draw loop with brightness per vertex (simple version for now)
+            // Step 3: Draw loop with brightness per vertex
+            if (disconnectedNow.empty() && hasCycle) {
             for (size_t i = 0; i < pulsePoints.size(); ++i) {
                 glm::mat4 model = glm::mat4(1.0f);
                 glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
@@ -925,6 +1109,7 @@ int main()
                 glPointSize(10.0f);
                 glDrawArrays(GL_POINTS, i, 1);
             }
+        }
 
             glEnable(GL_DEPTH_TEST);
 
@@ -987,24 +1172,42 @@ int main()
         }
         
                     // Plot voltage graph
-            if (watchedComponentId != -1 && voltageHistory.count(watchedComponentId)) {
-                const std::deque<float>& history = voltageHistory[watchedComponentId];
-
-                // ImGui expects float*, so we convert
-                static std::vector<float> historyVec;
-                historyVec.assign(history.begin(), history.end());
-
-                ImGui::PlotLines("Voltage (V)", historyVec.data(), static_cast<int>(historyVec.size()), 0,
-                                nullptr, 0.0f, 5.0f, ImVec2(250, 100));
-            }
-
-        ImGui::End();
+                    auto it = voltageHistory.find(watchedComponentId);
+                    if (watchedComponentId != -1 && it != voltageHistory.end()) {
+                        const std::deque<float>& history = it->second;
+                    
+                        static std::vector<float> historyVec;
+                        historyVec.assign(history.begin(), history.end());
+                    
+                        ImGui::PlotLines("Voltage (V)", historyVec.data(), static_cast<int>(historyVec.size()), 0,
+                                         nullptr, 0.0f, 5.0f, ImVec2(250, 100));
+                    }
+                    
+        ImGui::End(); // End of Voltage Watcher window
 
         // Now we will do component type selection in the UI
         static int selectedType = 0;
         const char* componentTypes[] = { "Resistor", "Capacitor", "Inductor", "Diode" };
         static int newLayer = 1; // Default to layer 1  
         static float newX = 0.0f, newY = 0.0f, newz = 0.0f;
+
+
+        ImGui::SetNextWindowPos(ImVec2(10, 600), ImGuiCond_Once);
+        ImGui::Begin("Simulation Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Text("Choose Ground Node:");
+
+        if (ImGui::BeginCombo("##GroundSelector", std::to_string(groundComponentId).c_str())) {
+            for (const auto& c : components) {
+                bool selected = (groundComponentId == c.id);
+                if (ImGui::Selectable(std::to_string(c.id).c_str(), selected)) {
+                    groundComponentId = c.id;
+                }
+                if (selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::End();
+
 
         ImGui::SetNextWindowPos(ImVec2(10, 300), ImGuiCond_Once);
         ImGui::Begin("Add Component", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
@@ -1267,7 +1470,7 @@ int main()
                 }
 
                 // 3. Write to the file
-                std::ofstream outFile("outpuy_layout.json");
+                std::ofstream outFile("output_layout.json");
                 outFile<<output.dump(4); // Pretty print with 4 spaces
 
                 outFile.close();
@@ -1379,9 +1582,41 @@ int main()
         
             if (selected) {
                 ImGui::Begin("Edit Component");
+
+
+                
+                const char* compTypes[] = { "Resistor", "Capacitor", "Inductor", "Diode", "Battery" };
+                int currentTypeIndex = 0;
+                for (int i = 0; i < 5; ++i) {
+                    if (selected->type == compTypes[i]) {
+                        currentTypeIndex = i;
+                        break;
+                    }
+                }
+                if (ImGui::Combo("Type", &currentTypeIndex, compTypes, IM_ARRAYSIZE(compTypes))) {
+                    selected->type = compTypes[currentTypeIndex];
+
+                    // Auto-assign default resistance and voltage
+                    if (selected->type == "Resistor")      selected->resistance = 1.0f;
+                    else if (selected->type == "Capacitor") selected->resistance = 0.5f;
+                    else if (selected->type == "Inductor")  selected->resistance = 0.8f;
+                    else if (selected->type == "Diode")     selected->resistance = 2.0f;
+                    else if (selected->type == "Battery") {
+                        selected->resistance = 0.1f;
+                        selected->voltage = 5.0f;  // Default battery value
+                    }
+                }
+
+                // === Editable Resistance ===
+                ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+
+                // === Editable Voltage for Battery ===
+                if (selected->type == "Battery") {
+                    ImGui::InputFloat("Voltage (V)", &selected->voltage);
+                }
         
                 ImGui::Text("Editing ID: %d", selected->id);
-                ImGui::InputText("Type", &selected->type[0], selected->type.size() + 1);
+                
                 ImGui::InputFloat("X", &selected->x);
                 ImGui::InputFloat("Y", &selected->y);
                 ImGui::InputFloat("Z", &selected->z);
@@ -1394,6 +1629,28 @@ int main()
                 ImGui::End();
             }
         }
+
+// === Circuit Validity Panel ===
+
+
+if (!disconnectedNow.empty() || !hasCycle) {
+    ImGui::SetNextWindowPos(ImVec2(10, 700), ImGuiCond_Once);
+    ImGui::Begin("⚠️ Circuit Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    
+    if (!disconnectedNow.empty()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Disconnected Components:");
+        for (int id : disconnectedNow) {
+            ImGui::BulletText("Component %d", id);
+        }
+    }
+
+    if (!hasCycle) {
+        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "⚠️ No current loop! Add a cycle.");
+    }
+
+    ImGui::End();
+}
+
 
 ImGui::Render();
 ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
