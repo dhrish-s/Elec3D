@@ -1065,7 +1065,8 @@ int main()
 
             // === PULSE SIGNAL === (Now using separate VAO/VBO)
             // Compute position based on sin (bidirectional motion)
-            float t = 0.5f * (1.0f + sin(glfwGetTime() * 1.0f));
+            float period = 2.0f;  // Seconds for one full trip
+            float t = fmod(glfwGetTime(), period) / period;
             glm::vec3 pulsePos = (1.0f - t) * fromPos + t * toPos;
 
             // UPdate trail
