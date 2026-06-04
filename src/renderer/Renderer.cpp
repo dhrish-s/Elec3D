@@ -212,15 +212,15 @@ bool Renderer::init()
     return true;
 }
 
-void Renderer::draw(const CircuitGraph& graph,
-                    const glm::mat4& view,
-                    const glm::mat4& projection)
+void Renderer::draw(const CircuitGraph& graph, const Camera& camera, float aspectRatio)
 {
     const float maxVoltage = 5.0f;
     const int gridSize = 10;
     const auto disconnectedNow = FindDisconnectedComponents(graph.components, graph.connections);
     const bool hasCycle = IsCircuitLooped(graph.components, graph.connections);
     const auto loopedSet = FindLoopedComponents(graph.components, graph.connections);
+    const glm::mat4 view = camera.getView();
+    const glm::mat4 projection = camera.getProjection(aspectRatio);
 
     glUseProgram(shaderProgram);
     glBindVertexArray(cubeVAO);

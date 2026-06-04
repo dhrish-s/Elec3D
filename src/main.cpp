@@ -22,29 +22,24 @@
 
 #include "circuit/Circuit.h"
 #include "io/LayoutSerializer.h"
+#include "renderer/Camera.h"
 #include "renderer/Renderer.h"
 
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
 
-
-
 int screenWidth = 1280;
 int screenHeight = 720;
 
-// yaw is rotation around the y-axis, pitch is rotation around the x-axis
-// These angles are used to control the camera direction
-float yaw = -90.0f;     // horizontal angle (left-right)
-float pitch = 0.0f;     // vertical angle (up-down)
 float lastX = screenWidth / 2.0f;
 float lastY = screenHeight / 2.0f;
-float fov = 45.0f;
 bool firstMouse = true;
 
 bool isDragging = false;
+bool isPanning = false;
+Camera camera;
 
 
-float radius = 10.0f;   // Distance from origin
 bool showGrid = true;  // Toggle visibility
 
 //Now voltage
@@ -71,37 +66,55 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    if (!isDragging) return;  // Only orbit when dragging
+    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
+        firstMouse = true;
+        return;
+    }
+
+    if (!isDragging && !isPanning) return;
 
     if (firstMouse) {
-        lastX = xpos;
-        lastY = ypos;
+        lastX = static_cast<float>(xpos);
+        lastY = static_cast<float>(ypos);
         firstMouse = false;
     }
 
     float xoffset = static_cast<float>(xpos - lastX);
-    float yoffset = static_cast<float>(lastY - ypos); // reversed y
+    float yoffset = static_cast<float>(lastY - ypos);
     lastX = static_cast<float>(xpos);
     lastY = static_cast<float>(ypos);
 
-    float sensitivity = 0.1f;
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
+    if (isDragging) {
+        camera.onMouseDrag(xoffset, yoffset);
+    }
 
-    yaw += xoffset;
-    pitch += yoffset;
-
-    if (pitch > 89.0f) pitch = 89.0f;
-    if (pitch < -89.0f) pitch = -89.0f;
+    if (isPanning) {
+        camera.pan(xoffset, yoffset);
+    }
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_MIDDLE) {
         if (action == GLFW_PRESS) {
-            isDragging = true;
+            if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
+                isDragging = false;
+                isPanning = false;
+                firstMouse = true;
+                return;
+            }
+
+            if (button == GLFW_MOUSE_BUTTON_LEFT) {
+                isDragging = true;
+            } else {
+                isPanning = true;
+            }
             firstMouse = true;  // reset to prevent jump
         } else if (action == GLFW_RELEASE) {
-            isDragging = false;
+            if (button == GLFW_MOUSE_BUTTON_LEFT) {
+                isDragging = false;
+            } else {
+                isPanning = false;
+            }
         }
     }
 }
@@ -110,9 +123,11 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) 
     // Adjust the field of view (FOV) based on scroll input
 {
-    fov -= static_cast<float>(yoffset);
-    if(fov<10.0f) fov = 10.0f;
-    if(fov>90.0f) fov = 90.0f;
+    if (ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse) {
+        return;
+    }
+
+    camera.onScroll(static_cast<float>(yoffset));
 }
 
 std::unordered_map<int, std::vector<PulseTrail>> pulseTrails;
@@ -124,25 +139,6 @@ std::unordered_map<int, bool> signalEnabled;  // connectionKey -> toggle state
 int hoverComponentId = -1;  // ID of the component currently hovered over
 
 int selectedComponentId = -1;  // ID of component currently selected (on click)
-
-
-glm::vec3 ScreenPosToWorldRay(float mouseX, float mouseY, const glm::mat4& projection, const glm::mat4& view)
-{
-    float x = (2.0f * mouseX) / screenWidth - 1.0f;
-    float y = 1.0f - (2.0f * mouseY) / screenHeight; // Invert Y coordinate
-    float z = 1.0f; // Near plane
-
-    glm::vec3 ray_nds = glm::vec3(x, y, z);
-    glm::vec4 ray_clip = glm::vec4(ray_nds,1.0);
-
-    glm::vec4 ray_eye = glm::inverse(projection) * ray_clip;
-    ray_eye = glm::vec4(ray_eye.x, ray_eye.y, -1.0, 0.0); // Transform to eye space
-
-    glm::vec3 ray_wor = glm::vec3(glm::inverse(view) * ray_eye);
-    ray_wor = glm::normalize(ray_wor); // Normalize the ray direction
-
-    return ray_wor;
-}
 
 bool RayIntersectsAABB(const glm::vec3& rayOrigin, const glm::vec3& rayDir,
     const glm::vec3& boxMin, const glm::vec3& boxMax, float& t)
@@ -418,26 +414,7 @@ int main()
         glClearColor(0.12f, 0.12f, 0.15f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        //Camera and transformation setup
-        // Set up camera position and orientation based on yaw and pitch angles
-        int maxLayer = 0;
-        for (const auto& c : components) {
-            if (c.layer > maxLayer) maxLayer = c.layer;
-        }
-
-        float cameraZ = - (5.0f + maxLayer * 2.0f);  // dynamic distance based on number of components but we arent using this
-        float camX = radius * cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-        float camY = radius * sin(glm::radians(pitch));
-        float camZ = radius * sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-
-        glm::vec3 cameraPos = glm::vec3(camX, camY, camZ);
-        glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-        glm::mat4 view = glm::lookAt(cameraPos, cameraTarget, cameraUp);
-
-        glm::mat4 projection = glm::perspective(glm::radians(fov),
-                                (float)screenWidth / (float)screenHeight,
-                                0.1f, 100.0f);
+        float aspectRatio = (float)screenWidth / (float)screenHeight;
 
         // Mouse Hover Detection
         double mouseX, mouseY;
@@ -447,8 +424,8 @@ int main()
         lastY = static_cast<float>(mouseY);
 
 
-        glm::vec3 rayDir = ScreenPosToWorldRay(static_cast<float>(mouseX), static_cast<float>(mouseY), projection, view);
-        glm::vec3 rayOrigin = cameraPos;  // Camera position
+        glm::vec3 rayDir = camera.screenPosToWorldRay(static_cast<float>(mouseX), static_cast<float>(mouseY), static_cast<float>(screenWidth), static_cast<float>(screenHeight));
+        glm::vec3 rayOrigin = camera.getPosition();  // Camera position
         
         hoverComponentId = -1;  // Reset hover ID
         float closestT = 1e6;  // Initialize to a large value
@@ -492,7 +469,7 @@ int main()
         CircuitGraph renderGraph;
         renderGraph.components = components;
         renderGraph.connections = connections;
-        renderer.draw(renderGraph, view, projection);
+        renderer.draw(renderGraph, camera, aspectRatio);
 
         glDisable(GL_DEPTH_TEST); // Important: Disable depth test before ImGui draw
 
@@ -500,8 +477,8 @@ int main()
         ImGui::SetNextWindowSize(ImVec2(300, 100), ImGuiCond_Always);
         ImGui::Begin("DEBUG TEST WINDOW", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
         ImGui::Text("If you see this, ImGui is working");
-        ImGui::Text("Camera Yaw: %.1f", yaw);
-        ImGui::Text("Camera Pitch: %.1f", pitch);
+        ImGui::Text("Camera Yaw: %.1f", camera.getYaw());
+        ImGui::Text("Camera Pitch: %.1f", camera.getPitch());
         ImGui::End();
 
         // Layer Control Window

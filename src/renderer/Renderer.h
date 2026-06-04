@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "../circuit/Circuit.h"
+#include "Camera.h"
 
 /// Stores one animated signal trail point for connection rendering.
 struct PulseTrail {
@@ -18,10 +19,8 @@ public:
     /// Initializes shader programs, buffers, vertex arrays, and fixed OpenGL state.
     bool init();
 
-    /// Draws the circuit using the same view and projection matrices computed by main.cpp.
-    void draw(const CircuitGraph& graph,
-              const glm::mat4& view,
-              const glm::mat4& projection);
+    /// Draws the circuit using the camera view and projection for the current aspect ratio.
+    void draw(const CircuitGraph& graph, const Camera& camera, float aspectRatio);
 
 private:
     unsigned int shaderProgram = 0;
