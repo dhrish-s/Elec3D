@@ -52,6 +52,7 @@ target_sources(Elec3D PRIVATE ${IMGUI_SRC})
 target_sources(Elec3D PRIVATE
     src/circuit/Circuit.cpp
     src/io/LayoutSerializer.cpp
+    src/renderer/Renderer.cpp
 )
 
 # adding directories to the include path

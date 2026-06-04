@@ -22,6 +22,7 @@
 
 #include "circuit/Circuit.h"
 #include "io/LayoutSerializer.h"
+#include "renderer/Renderer.h"
 
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
@@ -44,8 +45,6 @@ bool isDragging = false;
 
 
 float radius = 10.0f;   // Distance from origin
-unsigned int axisVAO, axisVBO;
-unsigned int gridVAO, gridVBO;
 bool showGrid = true;  // Toggle visibility
 
 //Now voltage
@@ -116,13 +115,6 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
     if(fov>90.0f) fov = 90.0f;
 }
 
-struct PulseTrail {
-    glm::vec3 pos;
-    float age;
-};
-
-
-
 std::unordered_map<int, std::vector<PulseTrail>> pulseTrails;
 
 std::unordered_map<int, float> componentVoltages;
@@ -133,68 +125,6 @@ int hoverComponentId = -1;  // ID of the component currently hovered over
 
 int selectedComponentId = -1;  // ID of component currently selected (on click)
 
-
-
-// Utility function to load, compile, and link shaders
-unsigned int LoadShaderProgram(const char* vertexPath, const char* fragmentPath) 
-{
-    std::ifstream vFile(vertexPath);
-    std::ifstream fFile(fragmentPath);
-    std::stringstream vStream, fStream;
-
-    if (!vFile || !fFile) {
-        std::cerr << "Failed to load shader files." << std::endl;
-        return 0;
-    }
-
-    vStream << vFile.rdbuf();
-    fStream << fFile.rdbuf();
-
-    std::string vertexCode = vStream.str();
-    std::string fragmentCode = fStream.str();
-    const char* vShaderCode = vertexCode.c_str();
-    const char* fShaderCode = fragmentCode.c_str();
-
-    // Compile vertex shader
-    unsigned int vertex = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex, 1, &vShaderCode, nullptr);
-    glCompileShader(vertex);
-
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(vertex, 512, nullptr, infoLog);
-        std::cerr << "Vertex Shader Compilation Failed:\n" << infoLog << std::endl;
-    }
-
-    // Compile fragment shader
-    unsigned int fragment = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment, 1, &fShaderCode, nullptr);
-    glCompileShader(fragment);
-    glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(fragment, 512, nullptr, infoLog);
-        std::cerr << "Fragment Shader Compilation Failed:\n" << infoLog << std::endl;
-    }
-
-    // Link shaders
-    unsigned int shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertex);
-    glAttachShader(shaderProgram, fragment);
-    glLinkProgram(shaderProgram);
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
-        std::cerr << "Shader Linking Failed:\n" << infoLog << std::endl;
-    }
-
-    // Cleanup
-    glDeleteShader(vertex);
-    glDeleteShader(fragment);
-
-    return shaderProgram;
-}
 
 glm::vec3 ScreenPosToWorldRay(float mouseX, float mouseY, const glm::mat4& projection, const glm::mat4& view)
 {
@@ -444,147 +374,10 @@ int main()
     }
 
 
-    //cube vertices
-    float cubeVertices[]={
-        -0.5f, -0.5f, -0.5f,  
-        0.5f, -0.5f, -0.5f,  
-        0.5f,  0.5f, -0.5f,  
-       -0.5f,  0.5f, -0.5f,  
-       -0.5f, -0.5f,  0.5f,  
-        0.5f, -0.5f,  0.5f,  
-        0.5f,  0.5f,  0.5f,  
-       -0.5f,  0.5f,  0.5f   
-    };
-
-    unsigned int cubeIndices[] = {
-        0, 1, 2, 2, 3, 0,  // back face
-        4, 5, 6, 6, 7, 4,  // front face
-        0, 1, 5, 5, 4, 0,  // bottom face
-        2, 3, 7, 7, 6, 2,  // top face
-        1, 2, 6, 6, 5, 1,  // right face
-        0, 3, 7, 7, 4, 0   // left face
-    };
-
-    // Below is the VAO, VBO, and EBO setup.
-
-    //VAO is a Vertex Array Object, VBO is a Vertex Buffer Object, and EBO is an Element Buffer Object
-    unsigned int VAO, VBO, EBO;
-    //glGenvertexArrays generates a vertex array object, glGenBuffers generates a buffer object, and glBindBuffer binds the buffer object to the specified target.
-    //glBufferData creates and initializes a buffer object's data store.
-    //glVertexAttribPointer specifies the location and data format of the array of generic vertex attributes at index 0. glEnableVertexAttribArray enables the vertex attribute array at index 0.
-    //glBindVertexArray binds the vertex array object.
-    //glBindBuffer binds the buffer object to the specified target.
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
-
-    // bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
-    glBindVertexArray(VAO);
-
-    // bind the vertex buffer object
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
-
-    // index buffer object
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW);
-
-    //position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    //unbind the VBO and EBO (not the VAO) to avoid accidental modification
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    // The cube VAO setup is done. You can now use it to draw the cube.
-
-    //Line VAO/VBO setup
-    unsigned int lineVAO, lineVBO;
-    glGenVertexArrays(1, &lineVAO);
-    glGenBuffers(1, &lineVBO);
-
-    glBindVertexArray(lineVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
-    glBufferData(GL_ARRAY_BUFFER,sizeof(float)*6,nullptr,GL_DYNAMIC_DRAW); // 6 floats for 2 points (3 floats each)
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
-    // The line VAO setup is done. You can now use it to draw lines.
-
-    // Pulse VAO/VBO setup
-    unsigned int pulseVAO, pulseVBO;
-    glGenVertexArrays(1, &pulseVAO);
-    glGenBuffers(1, &pulseVBO);
-
-    glBindVertexArray(pulseVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, pulseVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 3, nullptr, GL_DYNAMIC_DRAW); // Single point
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
-
-
-    // The pulse VAO setup is done. You can now use it to draw pulses.
-
-
-    glGenVertexArrays(1, &axisVAO);
-    glGenBuffers(1, &axisVBO);
-
-    float axisVertices[] = {
-        // X axis (red)
-        0.0f, 0.0f, 0.0f,   3.0f, 0.0f, 0.0f,
-        // Y axis (green)
-        0.0f, 0.0f, 0.0f,   0.0f, 3.0f, 0.0f,
-        // Z axis (blue)
-        0.0f, 0.0f, 0.0f,   0.0f, 0.0f, 3.0f
-    };
-
-    glBindVertexArray(axisVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, axisVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(axisVertices), axisVertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    glBindVertexArray(0);
-    // The axis VAO setup is done. You can now use it to draw the axes.
-
-
-    // Generating grid lines and settng up VAO/VBO
-    std ::vector<float> gridVertices;
-    const int gridSize = 10; // Size of the grid (10x10) and grid extends from -10 to 10 in both x and z directions
-
-    for (int i = -gridSize; i <= gridSize; ++i) {
-        // Lines parallel to Z (constant X)
-        gridVertices.push_back((float)i); gridVertices.push_back(0.0f); gridVertices.push_back((float)-gridSize);
-        gridVertices.push_back((float)i); gridVertices.push_back(0.0f); gridVertices.push_back((float)gridSize);
-    
-        // Lines parallel to X (constant Z)
-        gridVertices.push_back((float)-gridSize); gridVertices.push_back(0.0f); gridVertices.push_back((float)i);
-        gridVertices.push_back((float)gridSize);  gridVertices.push_back(0.0f); gridVertices.push_back((float)i);
+    Renderer renderer;
+    if (!renderer.init()) {
+        return -1;
     }
-    
-    glGenVertexArrays(1, &gridVAO);
-    glGenBuffers(1, &gridVBO);
-    glBindVertexArray(gridVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
-    glBufferData(GL_ARRAY_BUFFER, gridVertices.size() * sizeof(float), gridVertices.data(), GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
-
-
-
-
-
-
-    unsigned int shaderProgram = LoadShaderProgram("../shaders/cube.vert", "../shaders/cube.frag");
-
-    // Enable depth test once, before the loop (you already have this — keep it!)
-    glEnable(GL_DEPTH_TEST);
 
     // === Auto-connect popup state ===
     static bool showConnectionPopup = false;
@@ -601,9 +394,6 @@ int main()
 
         std::vector<int> disconnectedNow = FindDisconnectedComponents(components, connections);
         bool hasCycle = IsCircuitLooped(components, connections);
-        auto loopedSet = FindLoopedComponents(components, connections);
-
-        
         // Only solve if circuit is connected AND has a loop
         if (disconnectedNow.empty() && hasCycle) {
             SolveKirchhoffVoltages(components, connections, groundComponentId);
@@ -621,20 +411,12 @@ int main()
             }
         }
 
-        const float maxVoltage = 5.0f;  // Use the max voltage of your circuit
-
-
-
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
     
         glClearColor(0.12f, 0.12f, 0.15f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // -- drawing 3d scene --
-        glUseProgram(shaderProgram);
-        glBindVertexArray(VAO);
 
         //Camera and transformation setup
         // Set up camera position and orientation based on yaw and pitch angles
@@ -707,216 +489,10 @@ int main()
         wasMouseDown = isMouseDown;
         
 
-        int modelLoc = glGetUniformLocation(shaderProgram, "model");
-        int viewLoc = glGetUniformLocation(shaderProgram, "view");
-        int projLoc = glGetUniformLocation(shaderProgram, "projection");
-        int colorLoc = glGetUniformLocation(shaderProgram, "objectColor");
-
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-        for (const auto& c : components) {
-            
-            if (visibleLayers.count(c.layer) == 0) continue;
-            glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
-        
-            // Type-based scaling
-            glm::vec3 scale(1.0f);
-            if (c.type == "Resistor")    scale = glm::vec3(1.0f, 0.5f, 0.5f);
-            else if (c.type == "Capacitor") scale = glm::vec3(0.7f, 1.0f, 0.7f);
-            else if (c.type == "Inductor")  scale = glm::vec3(1.2f, 1.2f, 1.2f);
-            else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
-        
-            
-            // Voltage → Color mapping (blue = 0V, red = 5V)
-            float voltage = componentVoltages.count(c.id) ? componentVoltages[c.id] : 0.0f;
-            float normV = glm::clamp(voltage / maxVoltage, 0.0f, 1.0f);
-            glm::vec3 color = glm::mix(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f), normV);
-
-
-            if(c.id == hoverComponentId) {
-                color = glm::vec3(1.0f, 1.0f, 0.0f); // Highlight color (yellow)
-            }
-            glUniform3fv(colorLoc, 1, glm::value_ptr(color));
-
-            float pulse = 0.5f + 0.5f * sin(glfwGetTime() * 3.0f);
-            glUniform1f(glGetUniformLocation(shaderProgram, "brightness"), pulse);
-
-            
-            //  Animate rotation
-            float angle = (float)glfwGetTime();
-        
-            //  Final model matrix (scale → rotate → translate)
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
-            model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
-            model = glm::scale(model, scale);
-
-            // Upload and draw
-            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-        }
-
-        // ... [camera/view/model loops and glDrawElements]
-        glBindVertexArray(0);
-
-
-        // Draw axes (X, Y, Z) in red, green, and blue respectively
-        // -- AXIS LINES --
-        glBindVertexArray(axisVAO);
-        glm::mat4 axisModel = glm::mat4(1.0f);
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(axisModel));
-
-        // X axis - red
-        glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(1.0f, 0.0f, 0.0f)));
-        glDrawArrays(GL_LINES, 0, 2);
-
-        // Y axis - green
-        glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(0.0f, 1.0f, 0.0f)));
-        glDrawArrays(GL_LINES, 2, 2);
-
-        // Z axis - blue
-        glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f, 1.0f)));
-        glDrawArrays(GL_LINES, 4, 2);
-
-        if (showGrid) {
-            glBindVertexArray(gridVAO);
-            glm::mat4 gridModel = glm::mat4(1.0f);
-            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(gridModel));
-            glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(0.4f))); // subtle gray
-            glDrawArrays(GL_LINES, 0, (gridSize * 4 + 4));  // 4 verts per line pair
-            glBindVertexArray(0);
-        }
-        
-
-        glBindVertexArray(0);
-
-        
-
-        // the above code draws the cubes. Now we will draw the lines between them.
-
-        glBindVertexArray(lineVAO);
-        for(const auto& conn : connections)
-        {
-            // 1. Lookup components
-            // 2. Skip invisible layers
-            // 3. Compute fromPos / toPos
-            // 4. Draw gray connection line
-            // 5. Compute pulsePos using sin(...)
-            // 6. Update trail for pulseTrails[connKey]
-            // 7. === DRAW updated trail for this connection === 
-            const Component* from = nullptr;
-            const Component* to = nullptr;
-
-            for(const auto& c : components)
-            {
-                if(c.id == conn.from_id) from = &c;
-                if(c.id == conn.to_id) to = &c;
-            }
-            
-            if (!from || !to) continue;
-
-            if (!loopedSet.count(from->id) || !loopedSet.count(to->id))
-                continue;
-            // the above condition is used to check if the component is in the looped set or not    
-
-
-            bool fromVisible = visibleLayers.count(from->layer);
-            bool toVisible = visibleLayers.count(to->layer);
-
-            if (!fromVisible || !toVisible) {
-                int connKey = from->id * 1000 + to->id;
-                pulseTrails[connKey].clear(); // Prevent ghost trails
-                continue;
-            }
-
-            glm::vec3 fromPos(from->x, from->y + from->layer * 1.0f, from->z);
-            glm::vec3 toPos(to->x, to->y + to->layer * 1.0f, to->z);
-
-            float lineVertices[] = {
-                fromPos.x, fromPos.y, fromPos.z,
-                toPos.x,   toPos.y,   toPos.z
-            };
-
-            glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(lineVertices), lineVertices);
-
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-            glEnableVertexAttribArray(0);
-
-            glm::mat4 model = glm::mat4(1.0f);
-            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-            glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(0.8f))); // light gray
-            glDrawArrays(GL_LINES, 0, 2);
-            glBindVertexArray(0);
-
-
-            // === TRAIL DRAWING ===
-            int connKey = from->id * 1000 + to->id;
-            if (!signalEnabled[connKey]) continue;  // Skip if disabled
-
-            std::vector<glm::vec3> pulsePoints;
-            std::vector<float> pulseBrightness;
-
-            if (disconnectedNow.empty() && hasCycle) {
-            auto& trail = pulseTrails[connKey];
-
-            // === PULSE SIGNAL === (Now using separate VAO/VBO)
-            // Compute position based on sin (bidirectional motion)
-            float period = 2.0f;  // Seconds for one full trip
-            float t = fmod(glfwGetTime(), period) / period;
-            glm::vec3 pulsePos = (1.0f - t) * fromPos + t * toPos;
-
-            // UPdate trail
-            trail.push_back({ pulsePos, 0.0f });
-
-            for (auto& pt : trail)
-                pt.age += 0.02f;
-            
-            trail.erase(std::remove_if(trail.begin(), trail.end(),
-                [](const PulseTrail& p) { return p.age > 1.0f; }), trail.end());
-
-            
-            
-            glBindVertexArray(pulseVAO);
-            glDisable(GL_DEPTH_TEST);
-            // Step 1: Prepare data
-     
-
-            for (const auto& pt : trail) {
-                pulsePoints.push_back(pt.pos);
-                pulseBrightness.push_back(1.0f - pt.age);  // brightness for each point
-            }
-        }
-
-            // Step 2: Upload all positions
-            glBindVertexArray(pulseVAO);
-            glBindBuffer(GL_ARRAY_BUFFER, pulseVBO);
-            glBufferData(GL_ARRAY_BUFFER, pulsePoints.size() * sizeof(glm::vec3), pulsePoints.data(), GL_DYNAMIC_DRAW);
-
-            // Set up vertex attrib pointer (position)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-            glEnableVertexAttribArray(0);
-
-            // Step 3: Draw loop with brightness per vertex
-            if (disconnectedNow.empty() && hasCycle) {
-            for (size_t i = 0; i < pulsePoints.size(); ++i) {
-                glm::mat4 model = glm::mat4(1.0f);
-                glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1f(glGetUniformLocation(shaderProgram, "brightness"), pulseBrightness[i]);
-                glUniform3fv(colorLoc, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.0f)));  // yellow glow
-                glPointSize(10.0f);
-                glDrawArrays(GL_POINTS, i, 1);
-            }
-        }
-
-            glEnable(GL_DEPTH_TEST);
-
-
-
-
-
-        }
+        CircuitGraph renderGraph;
+        renderGraph.components = components;
+        renderGraph.connections = connections;
+        renderer.draw(renderGraph, view, projection);
 
         glDisable(GL_DEPTH_TEST); // Important: Disable depth test before ImGui draw
 
