@@ -49,6 +49,9 @@ set(IMGUI_SRC
 
 #adding the above files to the source files
 target_sources(Elec3D PRIVATE ${IMGUI_SRC})
+target_sources(Elec3D PRIVATE
+    src/circuit/Circuit.cpp
+)
 
 # adding directories to the include path
 target_include_directories(Elec3D PRIVATE

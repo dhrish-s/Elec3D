@@ -20,6 +20,8 @@
 #include <Eigen/Dense>
 #include<unordered_set>
 
+#include "circuit/Circuit.h"
+
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
 
@@ -114,21 +116,6 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
     if(fov<10.0f) fov = 10.0f;
     if(fov>90.0f) fov = 90.0f;
 }
-
-struct Component {
-    int id;
-    std::string type;
-    float x,y,z;
-    int layer;
-
-    float resistance = 1.0f;
-    float voltage = 0.0f;
-};
-
-struct Connection {
-    int from_id;
-    int to_id;
-};
 
 struct PulseTrail {
     glm::vec3 pos;
@@ -294,156 +281,6 @@ void SimulateVoltages(const std::vector<Component>& components, const std::vecto
             }
         }
     }
-}
-
-
-// Now circuit checking and if the circuit is valid
-std::vector<int> FindDisconnectedComponents(const std::vector<Component>& components,
-    const std::vector<Connection>& connections) 
-{
-    std::unordered_set<int> visited;
-    std::unordered_map<int, std::vector<int>> adj;
-
-    for (const auto& conn : connections) {
-        adj[conn.from_id].push_back(conn.to_id);
-        adj[conn.to_id].push_back(conn.from_id);  // Assuming undirected connections
-    }// the above for loop is used to create the adjacency list for the graph
-    // in simple words it is used to create the graph from the connections
-    // push_back is used to add the connection to the graph
-    // and the graph is undirected so we add both the connections
-
-    std::function<void(int)> dfs = [&](int node) {
-        visited.insert(node);
-        for (int neighbor : adj[node]) {
-            if (!visited.count(neighbor)) {
-                dfs(neighbor);
-            }
-        }
-    };
-    // the above function is used to perform the depth first search on the graph
-    // it is used to visit all the nodes in the graph and mark them as visited
-    // the function is recursive and it is used to visit all the nodes in the graph
-    // We do DFS on the graph to find all the connected components in the graph
-    // and mark them as visited
-    // and the function is called for each node in the graph
-    
-    if(!components.empty()){
-        dfs(components[0].id);  // Start DFS from the first component
-    }
-    // the above line is used to start the DFS from the first component in the graph
-    // and the first component is used to start the DFS because it is the first component in the graph
-
-    std::vector<int> disconnected;
-    for (const auto& c : components) {
-        if (!visited.count(c.id)) {
-            disconnected.push_back(c.id);  // Add disconnected component ID to the list
-        }
-    }
-    // the above line is used to add the disconnected component ID to the list of disconnected components
-
-    return disconnected;  // Return the list of disconnected components
-
-
-
-}
-
-
-bool HasCycleDFS(int node, int parent,
-    const std::unordered_map<int, std::vector<int>>& adj,
-    std::unordered_set<int>& visited) 
-    {
-        visited.insert(node);
-        for (int neighbor : adj.at(node)) 
-        {
-            if (!visited.count(neighbor)) 
-            {
-                if (HasCycleDFS(neighbor, node, adj, visited))
-                return true;
-            } else if (neighbor != parent) 
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-bool IsCircuitLooped(const std::vector<Component>& components,
-        const std::vector<Connection>& connections) 
-        {
-            std::unordered_map<int, std::vector<int>> adj;
-            for (const auto& conn : connections) 
-            {
-                adj[conn.from_id].push_back(conn.to_id);
-                adj[conn.to_id].push_back(conn.from_id);
-            }
-
-        std::unordered_set<int> visited;
-        for (const auto& c : components) 
-    {
-        if (!visited.count(c.id)) 
-        {
-            if (HasCycleDFS(c.id, -1, adj, visited))
-            return true;
-        }
-    }
-    return false;
-}
-
-std::unordered_set<int> FindLoopedComponents(const std::vector<Component>& components,
-                                             const std::vector<Connection>& connections) {
-    std::unordered_map<int, std::vector<int>> adj;
-    for (const auto& conn : connections) {
-        adj[conn.from_id].push_back(conn.to_id);
-        adj[conn.to_id].push_back(conn.from_id);
-    } // the above line is used to create the adjacency list for the graph
-
-    std::unordered_set<int> visited, inCycle;
-    // the above line is used to create the visited set and the inCycle set
-    // the visited set is used to mark the visited nodes in the graph
-    // and the inCycle set is used to mark the nodes in the cycle
-
-    std::function<bool(int, int, std::vector<int>&)> dfs = [&](int node, int parent, std::vector<int>& path) {
-        visited.insert(node);
-        path.push_back(node);
-        // the above line is used to add the node to the path
-        // and the path is used to store the path of the node in the graph
-        
-
-        for (int neighbor : adj[node]) {
-            if (neighbor == parent) continue;
-            // Skip the parent node to avoid immediate backtracking
-
-            if (!visited.count(neighbor)) {
-                if (dfs(neighbor, node, path))
-                    return true;
-                    // Continue DFS if neighbor is not visited
-            } else {
-                auto it = std::find(path.begin(), path.end(), neighbor);
-                if (it != path.end()) {
-                    for (; it != path.end(); ++it)
-                        inCycle.insert(*it);
-                    inCycle.insert(neighbor);
-                    // Mark all nodes in the cycle
-                    // the for loop is used to add the nodes in the cycle to the inCycle set
-                    //*it is used to get the node in the cycle
-                    // and the inCycle set is used to mark the nodes in the cycle
-                }
-            }
-        }
-
-        path.pop_back();
-        return false;
-    };
-
-    for (const auto& c : components) {
-        if (!visited.count(c.id)) {
-            std::vector<int> path;
-            dfs(c.id, -1, path);
-        }// Start DFS from each unvisited component 
-        //call dfs function to find the cycle in the graph
-    }
-
-    return inCycle;
 }
 
 
