@@ -29,7 +29,7 @@ CircuitGraph LayoutSerializer::load(const std::string& path)
     CircuitGraph graph;
     std::ifstream file(path);
     if (!file) {
-        std::cerr << "[Elec3D] Failed to open: " << path << " — file not found\n";
+        std::cerr << "[Elec3D] Failed to open: " << path << " - file not found\n";
         return graph;
     }
 
@@ -84,7 +84,7 @@ void LayoutSerializer::save(const CircuitGraph& graph, const std::string& path)
 
     std::ofstream outFile(path);
     if (!outFile) {
-        std::cerr << "[Elec3D] Failed to open: " << path << " — file not found\n";
+        std::cerr << "[Elec3D] Failed to open: " << path << " - file not found\n";
         return;
     }
 

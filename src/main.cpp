@@ -360,7 +360,7 @@ int main()
     #include <filesystem>
     std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
 
-    CircuitGraph graph = LayoutSerializer::load("../src/layout.json");
+    CircuitGraph graph = LayoutSerializer::load("src/layout.json");
     std::vector<Component> components = graph.components;
     std::vector<Connection> connections = graph.connections;
 

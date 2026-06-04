@@ -26,7 +26,7 @@ static bool loadShaderSource(const char* path, std::string& source)
 {
     std::ifstream file(path);
     if (!file) {
-        std::cerr << "[Elec3D] Failed to open: " << path << " — file not found\n";
+        std::cerr << "[Elec3D] Failed to open: " << path << " - file not found\n";
         return false;
     }
 
@@ -194,7 +194,7 @@ bool Renderer::init()
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
 
-    shaderProgram = loadShaderProgram("../shaders/cube.vert", "../shaders/cube.frag");
+    shaderProgram = loadShaderProgram("shaders/cube.vert", "shaders/cube.frag");
     if (shaderProgram == 0) {
         return false;
     }
