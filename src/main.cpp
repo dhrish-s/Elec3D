@@ -21,13 +21,12 @@
 #include<unordered_set>
 
 #include "circuit/Circuit.h"
+#include "io/LayoutSerializer.h"
 
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
 
 
-
-using json = nlohmann::json;
 
 int screenWidth = 1280;
 int screenHeight = 720;
@@ -431,49 +430,11 @@ int main()
     #include <filesystem>
     std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
 
-    std::ifstream file("../src/layout.json");
-    if(!file){
-        std::cerr << "Failed to open layout.json" << std::endl;
-        return -1;
-    }
+    CircuitGraph graph = LayoutSerializer::load("../src/layout.json");
+    std::vector<Component> components = graph.components;
+    std::vector<Connection> connections = graph.connections;
 
-    json layout;
-    file >> layout;
-
-    std::vector<Component> components;
-
-    std::vector<Connection> connections;
-
-    for (const auto& item : layout["components"]) {
-        Component c;
-        c.id = item["id"];
-        c.type = item["type"];
-
-        // Assign resistance and voltage based on type
-        if (c.type == "Resistor") c.resistance = 1.0f;
-        else if (c.type == "Capacitor") c.resistance = 0.5f;
-        else if (c.type == "Inductor") c.resistance = 0.8f;
-        else if (c.type == "Diode") c.resistance = 2.0f;
-        else if (c.type == "Battery") 
-        {
-        c.resistance = 0.1f;   // Internal resistance
-        c.voltage = 5.0f;      // Provide 5V
-        }
-
-        c.x = item["position"][0];
-        c.y = item["position"][1];
-        c.z = item["position"][2];
-        c.layer = item["layer"];
-
-        components.push_back(c);
-    }
-
-    for(const auto& pair : layout["connections"]){
-        Connection conn;
-        conn.from_id = pair["from"];
-        conn.to_id = pair["to"];
-        connections.push_back(conn);
-
+    for(const auto& conn : connections){
         int key = conn.from_id * 1000 + conn.to_id;
         signalEnabled[key] = true;  // default to ON
     }
@@ -1287,81 +1248,40 @@ int main()
 
             if (ImGui :: Button ("Save Layout to Json"))
             {
-                json output;
-
-                // 1. Serialize components
-                for (const auto& c : components) {
-                    json compJson;
-                    compJson["id"] = c.id;
-                    compJson["type"] = c.type;
-                    compJson["layer"] = c.layer;
-                    compJson["position"] = { c.x, c.y, c.z };
-                    output["components"].push_back(compJson);
-                }
-
-                // 2. Serialize connections
-                for (const auto& conn : connections) {
-                    json connJson;
-                    connJson["from"] = conn.from_id;
-                    connJson["to"] = conn.to_id;
-                    output["connections"].push_back(connJson);
-                }
-
-                // 3. Write to the file
-                std::ofstream outFile("output_layout.json");
-                outFile<<output.dump(4); // Pretty print with 4 spaces
-
-                outFile.close();
+                CircuitGraph graphToSave;
+                graphToSave.components = components;
+                graphToSave.connections = connections;
+                LayoutSerializer::save(graphToSave, "output_layout.json");
                 std::cout << "Layout saved to output_layout.json" << std::endl;
             }
 
             // Loading the Layout
             if(ImGui::Button("Load Layout"))
             {
-                std::ifstream inFile("output_layout.json");
-                if(!inFile)
+                CircuitGraph loadedGraph = LayoutSerializer::load("output_layout.json");
+
+                // Clear existing components and connections
+                components.clear();
+                connections.clear();
+                pulseTrails.clear();
+                signalEnabled.clear();
+                visibleLayers.clear();
+
+                components = loadedGraph.components;
+                connections = loadedGraph.connections;
+
+                for(const auto& c: components)
                 {
-                    std::cerr << "Error opening file for reading \n";
+                    visibleLayers.insert(c.layer); // Show the layer of the loaded component
                 }
-                else
+
+                for(const auto& conn: connections)
                 {
-                    json loadedLayout;
-                    inFile >> loadedLayout;
+                    int key = conn.from_id * 1000 + conn.to_id;
+                    signalEnabled[key] = true; // Enable signal by default
 
-                    // Clear existing components and connections
-                    components.clear();
-                    connections.clear();
-                    pulseTrails.clear();
-                    signalEnabled.clear();
-                    visibleLayers.clear();
-
-                    for(const auto& item: loadedLayout["components"])
-                    {
-                        Component c;
-                        c.id = item["id"];
-                        c.type = item["type"];
-                        c.x = item["position"][0];
-                        c.y = item["position"][1];
-                        c.z = item["position"][2];
-
-                        c.layer = item["layer"];
-                        components.push_back(c);
-                        visibleLayers.insert(c.layer); // Show the layer of the loaded component
-
-                    }
-
-                    for(const auto& pair: loadedLayout["connections"])
-                    {
-                        Connection conn;
-                        conn.from_id = pair["from"];
-                        conn.to_id = pair["to"];
-                        connections.push_back(conn);
-                        int key = conn.from_id * 1000 + conn.to_id;
-                        signalEnabled[key] = true; // Enable signal by default
-
-                    }
-                    std::cout << "Layout loaded from output_layout.json\n";
                 }
+                std::cout << "Layout loaded from output_layout.json\n";
             }
 
 
