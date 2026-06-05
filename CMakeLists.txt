@@ -53,6 +53,7 @@ target_sources(Elec3D PRIVATE
     src/circuit/Circuit.cpp
     src/io/LayoutSerializer.cpp
     src/renderer/Renderer.cpp
+    src/sim/MNASolver.cpp
 )
 
 # adding directories to the include path
