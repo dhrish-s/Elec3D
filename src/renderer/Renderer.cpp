@@ -194,7 +194,7 @@ bool Renderer::init()
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
 
-    shaderProgram = loadShaderProgram("shaders/cube.vert", "shaders/cube.frag");
+    shaderProgram = loadShaderProgram("../shaders/cube.vert", "../shaders/cube.frag");
     if (shaderProgram == 0) {
         return false;
     }

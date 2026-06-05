@@ -27,9 +27,10 @@ static void applyComponentDefaults(Component& component)
 CircuitGraph LayoutSerializer::load(const std::string& path)
 {
     CircuitGraph graph;
-    std::ifstream file(path);
+    const std::string loadPath = path == "src/layout.json" ? "../src/layout.json" : path;
+    std::ifstream file(loadPath);
     if (!file) {
-        std::cerr << "[Elec3D] Failed to open: " << path << " - file not found\n";
+        std::cerr << "[Elec3D] Failed to open: " << loadPath << " - file not found\n";
         return graph;
     }
 
