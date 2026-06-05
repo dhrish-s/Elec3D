@@ -591,6 +591,7 @@ int main()
             newComp.y = newY;
             newComp.z = newz;
 
+            // TODO(Phase4): wrap in Command via CommandHistory
             components.push_back(newComp);
 
             // === Handle auto-connect logic ===
@@ -615,6 +616,7 @@ int main()
             }
 
             if (nearestID != -1) {
+                // TODO(Phase4): wrap in Command via CommandHistory
                 connections.push_back({ newComp.id, nearestID });
                 pulseTrails[newComp.id * 1000 + nearestID].clear();
                 std::cout << "Auto-connected to nearest: " << nearestID << std::endl;
@@ -624,6 +626,7 @@ int main()
         {
             // Option 2: Connect to first
             if (newComp.id != 0) {
+                // TODO(Phase4): wrap in Command via CommandHistory
                 connections.push_back({ newComp.id, 0 });
                 pulseTrails[newComp.id * 1000 + 0].clear();
                 std::cout << "Auto-connected to first component (ID 0)" << std::endl;
@@ -695,6 +698,7 @@ int main()
                     int fromID = (popupDirection == 0) ? lastAddedComponentId : targetID;
                     int toID   = (popupDirection == 0) ? targetID : lastAddedComponentId;
 
+                    // TODO(Phase4): wrap in Command via CommandHistory
                     connections.push_back({ fromID, toID });
                     pulseTrails[fromID * 1000 + toID].clear();
 
@@ -785,6 +789,7 @@ int main()
             if (ImGui::Button("Add Connection")) {
                 if (fromID != toID) {
                     Connection newConn{ fromID, toID };
+                    // TODO(Phase4): wrap in Command via CommandHistory
                     connections.push_back(newConn);
 
                     // Ensure trail is initialized (optional)
@@ -813,6 +818,7 @@ int main()
             {
                 CircuitGraph loadedGraph = LayoutSerializer::load("output_layout.json");
 
+                // TODO(Phase4): wrap in Command via CommandHistory
                 // Clear existing components and connections
                 components.clear();
                 connections.clear();
@@ -905,6 +911,7 @@ int main()
                     }
                 }
                 if (ImGui::Combo("Type", &currentTypeIndex, compTypes, IM_ARRAYSIZE(compTypes))) {
+                    // TODO(Phase4): wrap in Command via CommandHistory
                     selected->type = compTypes[currentTypeIndex];
 
                     // Auto-assign default resistance and voltage
@@ -919,18 +926,22 @@ int main()
                 }
 
                 // === Editable Resistance ===
+                // TODO(Phase4): wrap in Command via CommandHistory
                 ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
 
                 // === Editable Voltage for Battery ===
                 if (selected->type == "Battery") {
+                    // TODO(Phase4): wrap in Command via CommandHistory
                     ImGui::InputFloat("Voltage (V)", &selected->voltage);
                 }
         
                 ImGui::Text("Editing ID: %d", selected->id);
                 
+                // TODO(Phase4): wrap in Command via CommandHistory
                 ImGui::InputFloat("X", &selected->x);
                 ImGui::InputFloat("Y", &selected->y);
                 ImGui::InputFloat("Z", &selected->z);
+                // TODO(Phase4): wrap in Command via CommandHistory
                 ImGui::InputInt("Layer", &selected->layer);
         
                 if (ImGui::Button("Close")) {
