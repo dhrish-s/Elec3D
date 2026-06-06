@@ -24,6 +24,7 @@
 #include "io/LayoutSerializer.h"
 #include "renderer/Camera.h"
 #include "renderer/Renderer.h"
+#include "sim/MNASolver.h"
 
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
@@ -390,20 +391,83 @@ int main()
 
         std::vector<int> disconnectedNow = FindDisconnectedComponents(components, connections);
         bool hasCycle = IsCircuitLooped(components, connections);
-        // Only solve if circuit is connected AND has a loop
-        if (disconnectedNow.empty() && hasCycle) {
-            SolveKirchhoffVoltages(components, connections, groundComponentId);
+
+        int lowestComponentId = components.empty() ? -1 : components.front().id;
+        bool groundNodeExists = false;
+        for (const auto& c : components) {
+            if (c.id < lowestComponentId) {
+                lowestComponentId = c.id;
+            }
+            if (c.id == groundComponentId) {
+                groundNodeExists = true;
+            }
         }
-        
 
+        int activeGroundNodeId = groundNodeExists ? groundComponentId : lowestComponentId;
+        static int lastLoggedGroundNodeId = -1;
+        if (activeGroundNodeId != -1 && activeGroundNodeId != lastLoggedGroundNodeId) {
+            std::cerr << "[Elec3D] Ground node: " << activeGroundNodeId << "\n";
+            lastLoggedGroundNodeId = activeGroundNodeId;
+        }
 
-        if(watchedComponentId!=-1)
-        {
-            float voltage = componentVoltages.count(watchedComponentId) ? componentVoltages[watchedComponentId] : 0.0f;
-            voltageHistory[watchedComponentId].push_back(voltage);
+        std::ostringstream circuitSignatureStream;
+        circuitSignatureStream << activeGroundNodeId;
+        for (const auto& c : components) {
+            circuitSignatureStream << "|" << c.id << ":" << c.type << ":" << c.x << ":" << c.y << ":" << c.z
+                                   << ":" << c.layer << ":" << c.resistance << ":" << c.capacitance
+                                   << ":" << c.inductance << ":" << c.voltageSource << ":" << c.voltage;
+        }
+        for (const auto& conn : connections) {
+            circuitSignatureStream << "|" << conn.from_id << ">" << conn.to_id;
+        }
 
-            if (voltageHistory[watchedComponentId].size() > maxVoltageHistory) {
-                voltageHistory[watchedComponentId].pop_front();  // Remove oldest sample
+        static std::string lastCircuitSignature;
+        static bool solveFailureLogged = false;
+        const std::string circuitSignature = circuitSignatureStream.str();
+        if (circuitSignature != lastCircuitSignature) {
+            solveFailureLogged = false;
+            lastCircuitSignature = circuitSignature;
+        }
+
+        CircuitGraph simulationGraph;
+        simulationGraph.components = components;
+        simulationGraph.connections = connections;
+
+        std::vector<float> nodeVoltages;
+        if (activeGroundNodeId != -1) {
+            std::ostringstream solverLogSink;
+            std::streambuf* originalCerr = std::cerr.rdbuf(solverLogSink.rdbuf());
+            nodeVoltages = MNASolver::solve(simulationGraph, activeGroundNodeId);
+            std::cerr.rdbuf(originalCerr);
+        }
+
+        int maxComponentId = -1;
+        for (const auto& c : components) {
+            if (c.id > maxComponentId) {
+                maxComponentId = c.id;
+            }
+        }
+        if (nodeVoltages.empty() && maxComponentId >= 0) {
+            if (!solveFailureLogged) {
+                std::cerr << "[Elec3D] Voltage solve failed — circuit may be disconnected\n";
+                solveFailureLogged = true;
+            }
+            nodeVoltages.assign(static_cast<size_t>(maxComponentId + 1), 0.0f);
+        } else if (maxComponentId >= 0 && maxComponentId >= static_cast<int>(nodeVoltages.size())) {
+            nodeVoltages.resize(static_cast<size_t>(maxComponentId + 1), 0.0f);
+        }
+
+        componentVoltages.clear();
+        for (const auto& c : components) {
+            float voltage = 0.0f;
+            if (c.id >= 0 && c.id < static_cast<int>(nodeVoltages.size())) {
+                voltage = nodeVoltages[static_cast<size_t>(c.id)];
+            }
+
+            componentVoltages[c.id] = voltage;
+            voltageHistory[c.id].push_back(voltage);
+            if (voltageHistory[c.id].size() > 120) {
+                voltageHistory[c.id].pop_front();
             }
         }
 
@@ -523,17 +587,28 @@ int main()
             ImGui::EndCombo();
         }
         
-                    // Plot voltage graph
-                    auto it = voltageHistory.find(watchedComponentId);
-                    if (watchedComponentId != -1 && it != voltageHistory.end()) {
-                        const std::deque<float>& history = it->second;
-                    
-                        static std::vector<float> historyVec;
-                        historyVec.assign(history.begin(), history.end());
-                    
-                        ImGui::PlotLines("Voltage (V)", historyVec.data(), static_cast<int>(historyVec.size()), 0,
-                                         nullptr, 0.0f, 5.0f, ImVec2(250, 100));
-                    }
+        int selectedId = watchedComponentId;
+        float currentV = 0.0f;
+        if (!nodeVoltages.empty() &&
+            selectedId >= 0 &&
+            selectedId < (int)nodeVoltages.size())
+            currentV = nodeVoltages[selectedId];
+
+        ImGui::Text("Node %d: %.3f V", selectedId, currentV);
+
+        if (voltageHistory.count(selectedId) &&
+            !voltageHistory[selectedId].empty()) {
+            // Copy deque to a temporary vector for PlotLines
+            std::vector<float> plotData(
+                voltageHistory[selectedId].begin(),
+                voltageHistory[selectedId].end());
+            ImGui::PlotLines("##vwatch",
+                             plotData.data(),
+                             (int)plotData.size(),
+                             0, nullptr,
+                             -6.0f, 6.0f,
+                             ImVec2(0, 60));
+        }
                     
         ImGui::End(); // End of Voltage Watcher window
 
