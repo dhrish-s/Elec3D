@@ -14,6 +14,9 @@ struct Component {
 
     float resistance = 1.0f;
     float voltage = 0.0f;
+    float capacitance = 0.0f;
+    float inductance = 0.0f;
+    float voltageSource = 0.0f;
 };
 
 /// Stores a directed connection between two component IDs.

@@ -18,7 +18,7 @@ struct VoltageSourceStamp {
 
 bool isBattery(const Component& component)
 {
-    return component.type == "Battery" && component.voltage > 0.0f;
+    return component.type == "Battery" && component.voltageSource > 0.0f;
 }
 
 int findLowestComponentId(const CircuitGraph& graph)
@@ -135,7 +135,7 @@ std::vector<float> MNASolver::solve(const CircuitGraph& graph, int groundNodeId)
             voltageSources.push_back({
                 component.id,
                 findSourcePlusNode(graph, component, groundId),
-                component.voltage
+                component.voltageSource
             });
         }
     }
@@ -215,6 +215,7 @@ void TestMNASolver()
     graph.components.push_back({0, "Battery", 0.0f, 0.0f, 0.0f, 1, 0.1f, 5.0f});
     graph.components.push_back({1, "Resistor", 2.0f, 0.0f, 0.0f, 1, 10.0f, 0.0f});
     graph.components.push_back({2, "Resistor", 4.0f, 0.0f, 0.0f, 1, 10.0f, 0.0f});
+    graph.components[0].voltageSource = 5.0f;
     graph.connections.push_back({0, 1});
     graph.connections.push_back({1, 2});
     graph.connections.push_back({2, 0});

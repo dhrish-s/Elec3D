@@ -7,20 +7,23 @@
 
 using json = nlohmann::json;
 
-/// Applies the same type defaults that main.cpp used before JSON loading moved here.
-static void applyComponentDefaults(Component& component)
+/// Applies type defaults only when the JSON omitted that electrical field.
+static void applyComponentDefaults(Component& component, const json& item)
 {
     if (component.type == "Resistor") {
-        component.resistance = 1.0f;
+        if (!item.contains("resistance")) component.resistance = 1.0f;
     } else if (component.type == "Capacitor") {
-        component.resistance = 0.5f;
+        if (!item.contains("capacitance")) component.capacitance = 0.5f;
+        if (!item.contains("resistance")) component.resistance = 0.0f;
     } else if (component.type == "Inductor") {
-        component.resistance = 0.8f;
+        if (!item.contains("inductance")) component.inductance = 0.8f;
+        if (!item.contains("resistance")) component.resistance = 0.0f;
     } else if (component.type == "Diode") {
-        component.resistance = 2.0f;
+        if (!item.contains("resistance")) component.resistance = 2.0f;
     } else if (component.type == "Battery") {
-        component.resistance = 0.1f;
-        component.voltage = 5.0f;
+        if (!item.contains("resistance")) component.resistance = 0.1f;
+        if (!item.contains("voltageSource")) component.voltageSource = 5.0f;
+        if (!item.contains("voltage")) component.voltage = 5.0f;
     }
 }
 
@@ -41,14 +44,19 @@ CircuitGraph LayoutSerializer::load(const std::string& path)
         Component c;
         c.id = item.value("id", 0);
         c.type = item.value("type", std::string{});
-
-        applyComponentDefaults(c);
+        c.resistance = item.value("resistance", 1.0f);
+        c.voltage = item.value("voltage", 0.0f);
+        c.capacitance = item.value("capacitance", 0.0f);
+        c.inductance = item.value("inductance", 0.0f);
+        c.voltageSource = item.value("voltageSource", 0.0f);
 
         const json position = item.value("position", json::array({0.0f, 0.0f, 0.0f}));
         c.x = position.size() > 0 ? position[0].get<float>() : 0.0f;
         c.y = position.size() > 1 ? position[1].get<float>() : 0.0f;
         c.z = position.size() > 2 ? position[2].get<float>() : 0.0f;
         c.layer = item.value("layer", 0);
+
+        applyComponentDefaults(c, item);
 
         graph.components.push_back(c);
     }
@@ -73,6 +81,10 @@ void LayoutSerializer::save(const CircuitGraph& graph, const std::string& path)
         compJson["type"] = c.type;
         compJson["layer"] = c.layer;
         compJson["position"] = {c.x, c.y, c.z};
+        compJson["resistance"] = c.resistance;
+        compJson["capacitance"] = c.capacitance;
+        compJson["inductance"] = c.inductance;
+        compJson["voltageSource"] = c.voltageSource;
         output["components"].push_back(compJson);
     }
 

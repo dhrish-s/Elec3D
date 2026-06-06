@@ -915,19 +915,62 @@ int main()
                     selected->type = compTypes[currentTypeIndex];
 
                     // Auto-assign default resistance and voltage
-                    if (selected->type == "Resistor")      selected->resistance = 1.0f;
-                    else if (selected->type == "Capacitor") selected->resistance = 0.5f;
-                    else if (selected->type == "Inductor")  selected->resistance = 0.8f;
-                    else if (selected->type == "Diode")     selected->resistance = 2.0f;
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    if (selected->type == "Resistor") {
+                        selected->resistance = 1.0f;
+                        selected->capacitance = 0.0f;
+                        selected->inductance = 0.0f;
+                        selected->voltageSource = 0.0f;
+                    }
+                    else if (selected->type == "Capacitor") {
+                        selected->resistance = 0.0f;
+                        selected->capacitance = 0.5f;
+                        selected->inductance = 0.0f;
+                        selected->voltageSource = 0.0f;
+                    }
+                    else if (selected->type == "Inductor") {
+                        selected->resistance = 0.0f;
+                        selected->capacitance = 0.0f;
+                        selected->inductance = 0.8f;
+                        selected->voltageSource = 0.0f;
+                    }
+                    else if (selected->type == "Diode") {
+                        selected->resistance = 2.0f;
+                        selected->capacitance = 0.0f;
+                        selected->inductance = 0.0f;
+                        selected->voltageSource = 0.0f;
+                    }
                     else if (selected->type == "Battery") {
                         selected->resistance = 0.1f;
                         selected->voltage = 5.0f;  // Default battery value
+                        selected->capacitance = 0.0f;
+                        selected->inductance = 0.0f;
+                        selected->voltageSource = 5.0f;
                     }
                 }
 
-                // === Editable Resistance ===
-                // TODO(Phase4): wrap in Command via CommandHistory
-                ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                if (selected->type == "Battery") {
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Voltage Source (V)", &selected->voltageSource);
+                } else if (selected->type == "Resistor") {
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                } else if (selected->type == "Capacitor") {
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Capacitance (F)", &selected->capacitance);
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                } else if (selected->type == "Inductor") {
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Inductance (H)", &selected->inductance);
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                } else if (selected->type == "Diode") {
+                    // TODO(Phase4): wrap in EditPropertyCommand
+                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                }
 
                 // === Editable Voltage for Battery ===
                 if (selected->type == "Battery") {
