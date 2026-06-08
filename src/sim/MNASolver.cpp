@@ -16,6 +16,11 @@ struct VoltageSourceStamp {
     float voltage;
 };
 
+/// Inductors are treated as near-short-circuits in DC analysis.
+/// A tiny series resistance prevents division-by-zero in the
+/// conductance matrix while preserving near-zero DC voltage drop.
+static constexpr float INDUCTOR_DC_RESISTANCE = 1e-4f;
+
 bool isBattery(const Component& component)
 {
     return component.type == "Battery" && component.voltageSource > 0.0f;
@@ -69,12 +74,36 @@ int findSourcePlusNode(const CircuitGraph& graph, const Component& source, int g
     return source.id;
 }
 
-void stampConductance(Eigen::MatrixXf& G, int i, int j, float resistance)
+bool effectiveDcResistance(const Component& component, float& resistance)
 {
-    if (resistance <= 0.0f) {
-        return;
+    if (isBattery(component)) {
+        return false;
     }
 
+    resistance = component.resistance;
+
+    // Capacitor is open circuit at DC.
+    // Skip it so no DC current path is added to the matrix.
+    if (component.type == "Capacitor") {
+        return false;
+    }
+
+    // Inductor is short circuit at DC.
+    // Use tiny resistance to avoid division by zero.
+    if (component.type == "Inductor") {
+        resistance = INDUCTOR_DC_RESISTANCE;
+    }
+
+    if (resistance <= 0.0f) {
+        // TODO(future): model other ideal zero-resistance parts as KCL constraints.
+        return false;
+    }
+
+    return true;
+}
+
+void stampConductance(Eigen::MatrixXf& G, int i, int j, float resistance)
+{
     const float conductance = 1.0f / resistance;
 
     // Conductance stamp - each resistor adds its conductance to both diagonal entries
@@ -83,23 +112,6 @@ void stampConductance(Eigen::MatrixXf& G, int i, int j, float resistance)
     G(j, j) += conductance;
     G(i, j) -= conductance;
     G(j, i) -= conductance;
-}
-
-float resistanceForConnection(const Component& from, const Component& to)
-{
-    if (isBattery(from) && !isBattery(to)) {
-        return to.resistance;
-    }
-
-    if (!isBattery(from) && isBattery(to)) {
-        return from.resistance;
-    }
-
-    if (to.resistance > 0.0f) {
-        return to.resistance;
-    }
-
-    return from.resistance;
 }
 
 } // namespace
@@ -154,15 +166,13 @@ std::vector<float> MNASolver::solve(const CircuitGraph& graph, int groundNodeId)
             continue;
         }
 
-        if (isBattery(*from) && isBattery(*to)) {
-            continue;
+        float resistance = 0.0f;
+        if (effectiveDcResistance(*from, resistance)) {
+            stampConductance(G, from->id, to->id, resistance);
         }
-
-        if (isBattery(*to) && to->id == groundId) {
-            continue;
+        if (effectiveDcResistance(*to, resistance)) {
+            stampConductance(G, from->id, to->id, resistance);
         }
-
-        stampConductance(G, from->id, to->id, resistanceForConnection(*from, *to));
     }
 
     // STEP 3 - Stamp voltage sources.

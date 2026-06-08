@@ -1,5 +1,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <algorithm>
+#include <iomanip>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -25,6 +27,7 @@
 #include "renderer/Camera.h"
 #include "renderer/Renderer.h"
 #include "sim/MNASolver.h"
+#include "sim/TransientSolver.h"
 
 
 std::set<int> visibleLayers = {1, 2};  // Initially visible layers
@@ -46,6 +49,13 @@ bool showGrid = true;  // Toggle visibility
 //Now voltage
 std::unordered_map<int, std::deque<float>> voltageHistory;
 const int maxVoltageHistory = 200;  // Number of samples to keep per component
+constexpr float TRANSIENT_DT_DEFAULT = 1e-5f;
+constexpr float TRANSIENT_TOTAL_DEFAULT = 5e-3f;
+constexpr int FIRST_SOLVE_LOG_NODE_LIMIT = 5;
+float transientDt = TRANSIENT_DT_DEFAULT;
+float transientTotal = TRANSIENT_TOTAL_DEFAULT;
+int transientNode = 0;
+std::vector<float> transientResult;
 
 
 
@@ -360,6 +370,13 @@ int main()
     CircuitGraph graph = LayoutSerializer::load("src/layout.json");
     std::vector<Component> components = graph.components;
     std::vector<Connection> connections = graph.connections;
+    std::cerr << "[Elec3D] Loaded " << components.size() << " components\n";
+    std::cerr << "[Elec3D] Loaded " << connections.size() << " connections\n";
+    if (!connections.empty()) {
+        std::cerr << "[Elec3D] First connection: "
+                  << connections.front().from_id << " -> "
+                  << connections.front().to_id << "\n";
+    }
 
     for(const auto& conn : connections){
         int key = conn.from_id * 1000 + conn.to_id;
@@ -384,7 +401,7 @@ int main()
     static int popupDirection = 0;  // 0 = new -> existing, 1 = existing -> new
     static int popupStrategy = 0;   // 0 = nearest, 1 = first
 
-    static int groundComponentId = 3;
+    static int groundComponentId = 0;
 
     // Inside render loop:
     while (!glfwWindowShouldClose(window)) {
@@ -455,6 +472,20 @@ int main()
             nodeVoltages.assign(static_cast<size_t>(maxComponentId + 1), 0.0f);
         } else if (maxComponentId >= 0 && maxComponentId >= static_cast<int>(nodeVoltages.size())) {
             nodeVoltages.resize(static_cast<size_t>(maxComponentId + 1), 0.0f);
+        }
+
+        static bool firstVoltageSolveLogged = false;
+        if (!firstVoltageSolveLogged && !nodeVoltages.empty()) {
+            firstVoltageSolveLogged = true;
+            std::cerr << "[Elec3D] First voltage solve:\n";
+            const int nodesToLog = std::min(
+                FIRST_SOLVE_LOG_NODE_LIMIT,
+                static_cast<int>(nodeVoltages.size())
+            );
+            for (int i = 0; i < nodesToLog; ++i) {
+                std::cerr << "  Node " << i << ": " << std::fixed << std::setprecision(3)
+                          << nodeVoltages[static_cast<size_t>(i)] << " V\n";
+            }
         }
 
         componentVoltages.clear();
@@ -611,6 +642,60 @@ int main()
         }
                     
         ImGui::End(); // End of Voltage Watcher window
+
+        ImGui::SetNextWindowPos(ImVec2(330, 400), ImGuiCond_Once);
+        ImGui::Begin("Transient Sim", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImGui::CollapsingHeader("Transient Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::SliderFloat("dt (s)", &transientDt,
+                               1e-6f, 1e-3f, "%.2e");
+            ImGui::SliderFloat("Total (s)", &transientTotal,
+                               1e-3f, 0.1f, "%.3f");
+
+            if (!components.empty()) {
+                bool nodeExists = false;
+                for (const auto& c : components) {
+                    if (c.id == transientNode) {
+                        nodeExists = true;
+                        break;
+                    }
+                }
+                if (!nodeExists) {
+                    transientNode = components.front().id;
+                }
+
+                if (ImGui::BeginCombo("Node", std::to_string(transientNode).c_str())) {
+                    for (const auto& c : components) {
+                        bool selected = (transientNode == c.id);
+                        if (ImGui::Selectable(std::to_string(c.id).c_str(), selected)) {
+                            transientNode = c.id;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+            } else {
+                ImGui::InputInt("Node", &transientNode);
+            }
+
+            if (ImGui::Button("Run Transient")) {
+                CircuitGraph transientGraph;
+                transientGraph.components = components;
+                transientGraph.connections = connections;
+                transientResult = TransientSolver::solve(
+                    transientGraph, activeGroundNodeId,
+                    transientDt, transientTotal, transientNode);
+            }
+
+            if (!transientResult.empty()) {
+                ImGui::PlotLines("##transient",
+                                 transientResult.data(),
+                                 (int)transientResult.size(),
+                                 0, nullptr, -6.0f, 6.0f,
+                                 ImVec2(0, 80));
+            }
+            ImGui::Text("Samples: %d", (int)transientResult.size());
+        }
+        ImGui::End();
 
         // Now we will do component type selection in the UI
         static int selectedType = 0;
