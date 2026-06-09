@@ -14,6 +14,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "MeshBuilder.h"
+
 extern std::set<int> visibleLayers;
 extern bool showGrid;
 extern std::unordered_map<int, std::vector<PulseTrail>> pulseTrails;
@@ -209,6 +211,9 @@ bool Renderer::init()
     }
 
     glEnable(GL_DEPTH_TEST);
+    if (USE_COMPONENT_MESHES) {
+        m_meshRegistry = MeshBuilder::buildRegistry();
+    }
     return true;
 }
 
@@ -223,19 +228,15 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera, float aspec
     const glm::mat4 projection = camera.getProjection(aspectRatio);
 
     glUseProgram(shaderProgram);
-    glBindVertexArray(cubeVAO);
+    if (!USE_COMPONENT_MESHES) {
+        glBindVertexArray(cubeVAO);
+    }
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
     for (const auto& c : graph.components) {
         if (visibleLayers.count(c.layer) == 0) continue;
         glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
-
-        glm::vec3 scale(1.0f);
-        if (c.type == "Resistor")    scale = glm::vec3(1.0f, 0.5f, 0.5f);
-        else if (c.type == "Capacitor") scale = glm::vec3(0.7f, 1.0f, 0.7f);
-        else if (c.type == "Inductor")  scale = glm::vec3(1.2f, 1.2f, 1.2f);
-        else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
 
         float voltage = componentVoltages.count(c.id) ? componentVoltages[c.id] : 0.0f;
         float normV = glm::clamp(voltage / maxVoltage, 0.0f, 1.0f);
@@ -252,10 +253,25 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera, float aspec
         float angle = (float)glfwGetTime();
         glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
         model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::scale(model, scale);
+        if (USE_COMPONENT_MESHES) {
+            const std::string& key = c.type;
+            const Mesh& mesh = (m_meshRegistry.count(key) > 0)
+                ? m_meshRegistry.at(key)
+                : m_meshRegistry.at("Cube");
+            glBindVertexArray(mesh.vao);
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, 0);
+        } else {
+            glm::vec3 scale(1.0f);
+            if (c.type == "Resistor")    scale = glm::vec3(1.0f, 0.5f, 0.5f);
+            else if (c.type == "Capacitor") scale = glm::vec3(0.7f, 1.0f, 0.7f);
+            else if (c.type == "Inductor")  scale = glm::vec3(1.2f, 1.2f, 1.2f);
+            else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
 
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+            model = glm::scale(model, scale);
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+        }
     }
 
     glBindVertexArray(0);

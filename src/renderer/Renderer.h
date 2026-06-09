@@ -2,10 +2,13 @@
 
 #include <glm/glm.hpp>
 
+#include <map>
+#include <string>
 #include <vector>
 
 #include "../circuit/Circuit.h"
 #include "Camera.h"
+#include "MeshBuilder.h"
 
 /// Stores one animated signal trail point for connection rendering.
 struct PulseTrail {
@@ -35,6 +38,9 @@ private:
     unsigned int axisVBO = 0;
     unsigned int gridVAO = 0;
     unsigned int gridVBO = 0;
+
+    static constexpr bool USE_COMPONENT_MESHES = true;
+    std::map<std::string, Mesh> m_meshRegistry;
 
     int modelLoc = -1;
     int viewLoc = -1;
