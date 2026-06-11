@@ -15,6 +15,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "MeshBuilder.h"
+#include "WireRenderer.h"
 
 extern std::set<int> visibleLayers;
 extern bool showGrid;
@@ -214,10 +215,17 @@ bool Renderer::init()
     if (USE_COMPONENT_MESHES) {
         m_meshRegistry = MeshBuilder::buildRegistry();
     }
+    if (USE_BEZIER_WIRES) {
+        if (!m_wireRenderer.init()) {
+            std::cerr << "[Elec3D] WireRenderer failed to init\n";
+            return false;
+        }
+    }
     return true;
 }
 
-void Renderer::draw(const CircuitGraph& graph, const Camera& camera, float aspectRatio)
+void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
+                    float aspectRatio, float elapsedTime)
 {
     const float maxVoltage = 5.0f;
     const int gridSize = 10;
@@ -296,10 +304,17 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera, float aspec
         glBindVertexArray(0);
     }
 
-    glBindVertexArray(0);
-    glBindVertexArray(lineVAO);
+    if (USE_BEZIER_WIRES) {
+        const glm::vec3 cameraPosition = glm::vec3(glm::inverse(view)[3]);
+        m_wireRenderer.draw(
+            graph.connections, graph.components,
+            elapsedTime, view, projection,
+            cameraPosition);
+    } else {
+        glBindVertexArray(0);
+        glBindVertexArray(lineVAO);
 
-    for (const auto& conn : graph.connections) {
+        for (const auto& conn : graph.connections) {
         const Component* from = nullptr;
         const Component* to = nullptr;
 
@@ -391,5 +406,6 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera, float aspec
         }
 
         glEnable(GL_DEPTH_TEST);
+        }
     }
 }

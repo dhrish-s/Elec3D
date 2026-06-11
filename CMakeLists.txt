@@ -54,6 +54,7 @@ target_sources(Elec3D PRIVATE
     src/io/LayoutSerializer.cpp
     src/renderer/MeshBuilder.cpp
     src/renderer/Renderer.cpp
+    src/renderer/WireRenderer.cpp
     src/sim/MNASolver.cpp
     src/sim/TransientSolver.cpp
 )

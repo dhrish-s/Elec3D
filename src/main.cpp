@@ -564,7 +564,7 @@ int main()
         CircuitGraph renderGraph;
         renderGraph.components = components;
         renderGraph.connections = connections;
-        renderer.draw(renderGraph, camera, aspectRatio);
+        renderer.draw(renderGraph, camera, aspectRatio, static_cast<float>(glfwGetTime()));
 
         glDisable(GL_DEPTH_TEST); // Important: Disable depth test before ImGui draw
 

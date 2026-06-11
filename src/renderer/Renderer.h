@@ -9,6 +9,7 @@
 #include "../circuit/Circuit.h"
 #include "Camera.h"
 #include "MeshBuilder.h"
+#include "WireRenderer.h"
 
 /// Stores one animated signal trail point for connection rendering.
 struct PulseTrail {
@@ -23,7 +24,8 @@ public:
     bool init();
 
     /// Draws the circuit using the camera view and projection for the current aspect ratio.
-    void draw(const CircuitGraph& graph, const Camera& camera, float aspectRatio);
+    void draw(const CircuitGraph& graph, const Camera& camera,
+              float aspectRatio, float elapsedTime);
 
 private:
     unsigned int shaderProgram = 0;
@@ -41,6 +43,8 @@ private:
 
     static constexpr bool USE_COMPONENT_MESHES = true;
     std::map<std::string, Mesh> m_meshRegistry;
+    static constexpr bool USE_BEZIER_WIRES = true;
+    WireRenderer m_wireRenderer;
 
     int modelLoc = -1;
     int viewLoc = -1;
