@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -222,8 +223,10 @@ bool Renderer::init()
     m_litColorLoc = findUniform(m_shaderLit, "uColor");
     m_litLightDirLoc = findUniform(m_shaderLit, "uLightDir");
     m_litViewPosLoc = findUniform(m_shaderLit, "uViewPos");
+    m_litUseInstancingLoc = findUniform(m_shaderLit, "uUseInstancing");
     if (m_litModelLoc == -1 || m_litViewLoc == -1 || m_litProjLoc == -1 ||
-        m_litColorLoc == -1 || m_litLightDirLoc == -1 || m_litViewPosLoc == -1) {
+        m_litColorLoc == -1 || m_litLightDirLoc == -1 || m_litViewPosLoc == -1 ||
+        m_litUseInstancingLoc == -1) {
         return false;
     }
 
@@ -231,6 +234,37 @@ bool Renderer::init()
     glEnable(GL_MULTISAMPLE);
     if (USE_COMPONENT_MESHES) {
         m_meshRegistry = MeshBuilder::buildRegistry();
+
+        // Instance VBOs attach to each mesh's EXISTING vao (built above by
+        // MeshBuilder). This setup runs once regardless of
+        // USE_GPU_INSTANCING so toggling the flag never needs re-init.
+        for (auto& [key, mesh] : m_meshRegistry) {
+            InstanceBuffer buf;
+            glGenBuffers(1, &buf.vbo);
+            buf.capacity = INITIAL_INSTANCE_CAPACITY;
+
+            glBindVertexArray(mesh.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, buf.vbo);
+            glBufferData(GL_ARRAY_BUFFER,
+                         static_cast<GLsizeiptr>(buf.capacity * sizeof(InstanceData)),
+                         nullptr, GL_DYNAMIC_DRAW);
+
+            for (int i = 0; i < 4; ++i) {
+                const GLuint loc = static_cast<GLuint>(INSTANCE_ATTRIB_LOCATION_BASE + i);
+                glEnableVertexAttribArray(loc);
+                glVertexAttribPointer(loc, 4, GL_FLOAT, GL_FALSE, sizeof(InstanceData),
+                    reinterpret_cast<void*>(offsetof(InstanceData, modelMatrix) + i * sizeof(glm::vec4)));
+                glVertexAttribDivisor(loc, 1);
+            }
+            glEnableVertexAttribArray(INSTANCE_COLOR_ATTRIB_LOCATION);
+            glVertexAttribPointer(INSTANCE_COLOR_ATTRIB_LOCATION, 3, GL_FLOAT, GL_FALSE,
+                sizeof(InstanceData), reinterpret_cast<void*>(offsetof(InstanceData, color)));
+            glVertexAttribDivisor(INSTANCE_COLOR_ATTRIB_LOCATION, 1);
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glBindVertexArray(0);
+            m_instanceBuffers[key] = buf;
+        }
     }
     if (USE_BEZIER_WIRES) {
         if (!m_wireRenderer.init()) {
@@ -241,9 +275,50 @@ bool Renderer::init()
     return true;
 }
 
+/// Grow a mesh type's instance buffer if needed. Never shrinks; never
+/// reallocates when the existing capacity already fits the request.
+void Renderer::ensureInstanceCapacity(InstanceBuffer& buf, int neededCount)
+{
+    if (neededCount <= buf.capacity) {
+        return;
+    }
+    const int newCapacity = std::max(neededCount,
+        buf.capacity == 0 ? INITIAL_INSTANCE_CAPACITY : buf.capacity * 2);
+    glBindBuffer(GL_ARRAY_BUFFER, buf.vbo);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(newCapacity * sizeof(InstanceData)),
+                 nullptr, GL_DYNAMIC_DRAW);
+    buf.capacity = newCapacity;
+}
+
 void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
                     float aspectRatio, float elapsedTime)
 {
+    // Frame-time diagnostic: useful for comparing instanced vs
+    // non-instanced performance on large circuits. Reports at most once
+    // per second so it never floods stderr during normal use.
+    // Tracks two numbers: total inter-frame time (includes the caller's
+    // per-frame simulation work in main.cpp, outside this function) and
+    // render-only time (just this draw() call) — this separation matters
+    // because the simulation solve, not rendering, can dominate at scale.
+    static double lastFrameTime = 0.0;
+    static double lastFpsReportTime = 0.0;
+    static int framesSinceReport = 0;
+    static double renderTimeAccumulatorMs = 0.0;
+    const double now = glfwGetTime();
+    const double frameDeltaMs = (now - lastFrameTime) * 1000.0;
+    lastFrameTime = now;
+    ++framesSinceReport;
+    if (now - lastFpsReportTime >= 1.0) {
+        const double fps = framesSinceReport / (now - lastFpsReportTime);
+        const double avgRenderMs = renderTimeAccumulatorMs / framesSinceReport;
+        std::cerr << "[Elec3D] Frame time: " << frameDeltaMs << " ms, FPS: " << fps
+                   << ", avg render-only time: " << avgRenderMs << " ms\n";
+        framesSinceReport = 0;
+        lastFpsReportTime = now;
+        renderTimeAccumulatorMs = 0.0;
+    }
+    const double renderStart = glfwGetTime();
+
     const float maxVoltage = 5.0f;
     const int gridSize = 10;
     const auto disconnectedNow = FindDisconnectedComponents(graph.components, graph.connections);
@@ -264,56 +339,102 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
         glUniformMatrix4fv(m_litProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
         glUniform3fv(m_litLightDirLoc, 1, glm::value_ptr(lightDir));
         glUniform3fv(m_litViewPosLoc, 1, glm::value_ptr(cameraPosition));
+        // Set once per frame for every component draw call that follows;
+        // nothing between here and the next frame changes this value.
+        glUniform1i(m_litUseInstancingLoc, USE_GPU_INSTANCING ? 1 : 0);
     } else {
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
     }
 
-    for (const auto& c : graph.components) {
-        if (visibleLayers.count(c.layer) == 0) continue;
-        glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
+    if (USE_GPU_INSTANCING && USE_COMPONENT_MESHES) {
+        // Group every visible component's per-instance data by mesh-registry
+        // key, using the exact same model/color logic as the non-instanced
+        // loop below (voltage-to-color mix, hover highlight, Y rotation).
+        std::map<std::string, std::vector<InstanceData>> grouped;
+        const float angle = (float)glfwGetTime();
+        for (const auto& c : graph.components) {
+            if (visibleLayers.count(c.layer) == 0) continue;
+            glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
 
-        float voltage = componentVoltages.count(c.id) ? componentVoltages[c.id] : 0.0f;
-        float normV = glm::clamp(voltage / maxVoltage, 0.0f, 1.0f);
-        glm::vec3 color = glm::mix(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f), normV);
+            float voltage = componentVoltages.count(c.id) ? componentVoltages[c.id] : 0.0f;
+            float normV = glm::clamp(voltage / maxVoltage, 0.0f, 1.0f);
+            glm::vec3 color = glm::mix(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f), normV);
+            if (c.id == hoverComponentId) {
+                color = glm::vec3(1.0f, 1.0f, 0.0f);
+            }
 
-        if (c.id == hoverComponentId) {
-            color = glm::vec3(1.0f, 1.0f, 0.0f);
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
+            model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
+
+            const std::string key = (m_meshRegistry.count(c.type) > 0) ? c.type : std::string("Cube");
+            InstanceData inst;
+            inst.modelMatrix = model;
+            inst.color = color;
+            inst.pad = 0.0f;
+            grouped[key].push_back(inst);
         }
 
-        if (USE_BLINN_PHONG) {
-            glUniform3fv(m_litColorLoc, 1, glm::value_ptr(color));
-        } else {
-            glUniform3fv(colorLoc, 1, glm::value_ptr(color));
-            float pulse = 0.5f + 0.5f * static_cast<float>(sin(glfwGetTime() * 3.0f));
-            glUniform1f(brightnessLoc, pulse);
-        }
-
-        float angle = (float)glfwGetTime();
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
-        model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
-        if (USE_COMPONENT_MESHES) {
-            const std::string& key = c.type;
-            const Mesh& mesh = (m_meshRegistry.count(key) > 0)
-                ? m_meshRegistry.at(key)
-                : m_meshRegistry.at("Cube");
+        for (auto& [key, instances] : grouped) {
+            if (instances.empty()) continue;
+            InstanceBuffer& buf = m_instanceBuffers[key];
+            ensureInstanceCapacity(buf, static_cast<int>(instances.size()));
+            glBindBuffer(GL_ARRAY_BUFFER, buf.vbo);
+            glBufferSubData(GL_ARRAY_BUFFER, 0,
+                static_cast<GLsizeiptr>(instances.size() * sizeof(InstanceData)), instances.data());
+            const Mesh& mesh = m_meshRegistry.at(key);
             glBindVertexArray(mesh.vao);
-            glUniformMatrix4fv(USE_BLINN_PHONG ? m_litModelLoc : modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-            glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, 0);
-        } else {
-            glm::vec3 scale(1.0f);
-            if (c.type == "Resistor")    scale = glm::vec3(1.0f, 0.5f, 0.5f);
-            else if (c.type == "Capacitor") scale = glm::vec3(0.7f, 1.0f, 0.7f);
-            else if (c.type == "Inductor")  scale = glm::vec3(1.2f, 1.2f, 1.2f);
-            else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
-
-            model = glm::scale(model, scale);
-            glUniformMatrix4fv(USE_BLINN_PHONG ? m_litModelLoc : modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+            glDrawElementsInstanced(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, nullptr,
+                static_cast<GLsizei>(instances.size()));
         }
-    }
+        glBindVertexArray(0);
+    } else {
+        for (const auto& c : graph.components) {
+            if (visibleLayers.count(c.layer) == 0) continue;
+            glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
 
-    glBindVertexArray(0);
+            float voltage = componentVoltages.count(c.id) ? componentVoltages[c.id] : 0.0f;
+            float normV = glm::clamp(voltage / maxVoltage, 0.0f, 1.0f);
+            glm::vec3 color = glm::mix(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(1.0f, 0.0f, 0.0f), normV);
+
+            if (c.id == hoverComponentId) {
+                color = glm::vec3(1.0f, 1.0f, 0.0f);
+            }
+
+            if (USE_BLINN_PHONG) {
+                glUniform3fv(m_litColorLoc, 1, glm::value_ptr(color));
+            } else {
+                glUniform3fv(colorLoc, 1, glm::value_ptr(color));
+                float pulse = 0.5f + 0.5f * static_cast<float>(sin(glfwGetTime() * 3.0f));
+                glUniform1f(brightnessLoc, pulse);
+            }
+
+            float angle = (float)glfwGetTime();
+            glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
+            model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
+            if (USE_COMPONENT_MESHES) {
+                const std::string& key = c.type;
+                const Mesh& mesh = (m_meshRegistry.count(key) > 0)
+                    ? m_meshRegistry.at(key)
+                    : m_meshRegistry.at("Cube");
+                glBindVertexArray(mesh.vao);
+                glUniformMatrix4fv(USE_BLINN_PHONG ? m_litModelLoc : modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+                glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, 0);
+            } else {
+                glm::vec3 scale(1.0f);
+                if (c.type == "Resistor")    scale = glm::vec3(1.0f, 0.5f, 0.5f);
+                else if (c.type == "Capacitor") scale = glm::vec3(0.7f, 1.0f, 0.7f);
+                else if (c.type == "Inductor")  scale = glm::vec3(1.2f, 1.2f, 1.2f);
+                else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
+
+                model = glm::scale(model, scale);
+                glUniformMatrix4fv(USE_BLINN_PHONG ? m_litModelLoc : modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+                glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+            }
+        }
+
+        glBindVertexArray(0);
+    }
 
     glUseProgram(shaderProgram);
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
@@ -448,4 +569,6 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
         glEnable(GL_DEPTH_TEST);
         }
     }
+
+    renderTimeAccumulatorMs += (glfwGetTime() - renderStart) * 1000.0;
 }

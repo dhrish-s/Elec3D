@@ -17,6 +17,28 @@ struct PulseTrail {
     float age;
 };
 
+constexpr int INSTANCE_ATTRIB_LOCATION_BASE = 2;   // mat4 -> locations 2,3,4,5
+constexpr int INSTANCE_COLOR_ATTRIB_LOCATION = 6;
+constexpr int INITIAL_INSTANCE_CAPACITY = 64;      // starting reserve per mesh type, doubled on growth
+
+/// Per-instance data uploaded to the GPU for batched component rendering.
+/// One entry per component sharing a given mesh type.
+struct InstanceData {
+    glm::mat4 modelMatrix;
+    glm::vec3 color;
+    float pad;   // rounds struct to 80 bytes (16-byte aligned)
+};
+// A silent layout mismatch here corrupts every instanced draw without any
+// compiler error, so the byte size is checked explicitly.
+static_assert(sizeof(InstanceData) == 80,
+    "InstanceData layout changed - update glVertexAttribPointer offsets");
+
+/// GPU-side state for one mesh type's instance buffer.
+struct InstanceBuffer {
+    GLuint vbo = 0;
+    int capacity = 0;   // current allocated slot count
+};
+
 /// Draws the existing cube, axis, grid, connection, and pulse OpenGL scene.
 class Renderer {
 public:
@@ -28,6 +50,11 @@ public:
               float aspectRatio, float elapsedTime);
 
 private:
+    /// Grow a mesh type's instance buffer if needed. Never shrinks. Never
+    /// reallocates when the existing capacity already fits the request.
+    void ensureInstanceCapacity(InstanceBuffer& buf, int neededCount);
+
+
     unsigned int shaderProgram = 0;
     unsigned int m_shaderLit = 0;
     unsigned int cubeVAO = 0;
@@ -47,6 +74,8 @@ private:
     static constexpr bool USE_BEZIER_WIRES = true;
     WireRenderer m_wireRenderer;
     static constexpr bool USE_BLINN_PHONG = true;
+    static constexpr bool USE_GPU_INSTANCING = true;
+    std::map<std::string, InstanceBuffer> m_instanceBuffers; // keyed same as m_meshRegistry
 
     int modelLoc = -1;
     int viewLoc = -1;
@@ -60,4 +89,5 @@ private:
     int m_litColorLoc = -1;
     int m_litLightDirLoc = -1;
     int m_litViewPosLoc = -1;
+    int m_litUseInstancingLoc = -1;
 };
