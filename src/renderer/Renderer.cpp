@@ -211,7 +211,24 @@ bool Renderer::init()
         return false;
     }
 
+    m_shaderLit = loadShaderProgram("../shaders/component.vert", "../shaders/component.frag");
+    if (m_shaderLit == 0) {
+        return false;
+    }
+
+    m_litModelLoc = findUniform(m_shaderLit, "uModel");
+    m_litViewLoc = findUniform(m_shaderLit, "uView");
+    m_litProjLoc = findUniform(m_shaderLit, "uProjection");
+    m_litColorLoc = findUniform(m_shaderLit, "uColor");
+    m_litLightDirLoc = findUniform(m_shaderLit, "uLightDir");
+    m_litViewPosLoc = findUniform(m_shaderLit, "uViewPos");
+    if (m_litModelLoc == -1 || m_litViewLoc == -1 || m_litProjLoc == -1 ||
+        m_litColorLoc == -1 || m_litLightDirLoc == -1 || m_litViewPosLoc == -1) {
+        return false;
+    }
+
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_MULTISAMPLE);
     if (USE_COMPONENT_MESHES) {
         m_meshRegistry = MeshBuilder::buildRegistry();
     }
@@ -234,13 +251,23 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
     const auto loopedSet = FindLoopedComponents(graph.components, graph.connections);
     const glm::mat4 view = camera.getView();
     const glm::mat4 projection = camera.getProjection(aspectRatio);
+    const glm::vec3 cameraPosition = glm::vec3(glm::inverse(view)[3]);
 
-    glUseProgram(shaderProgram);
+    const unsigned int activeShader = USE_BLINN_PHONG ? m_shaderLit : shaderProgram;
+    glUseProgram(activeShader);
     if (!USE_COMPONENT_MESHES) {
         glBindVertexArray(cubeVAO);
     }
-    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    if (USE_BLINN_PHONG) {
+        const glm::vec3 lightDir = glm::normalize(glm::vec3(1.0f, 2.0f, 1.0f));
+        glUniformMatrix4fv(m_litViewLoc, 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(m_litProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
+        glUniform3fv(m_litLightDirLoc, 1, glm::value_ptr(lightDir));
+        glUniform3fv(m_litViewPosLoc, 1, glm::value_ptr(cameraPosition));
+    } else {
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    }
 
     for (const auto& c : graph.components) {
         if (visibleLayers.count(c.layer) == 0) continue;
@@ -253,10 +280,14 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
         if (c.id == hoverComponentId) {
             color = glm::vec3(1.0f, 1.0f, 0.0f);
         }
-        glUniform3fv(colorLoc, 1, glm::value_ptr(color));
 
-        float pulse = 0.5f + 0.5f * static_cast<float>(sin(glfwGetTime() * 3.0f));
-        glUniform1f(brightnessLoc, pulse);
+        if (USE_BLINN_PHONG) {
+            glUniform3fv(m_litColorLoc, 1, glm::value_ptr(color));
+        } else {
+            glUniform3fv(colorLoc, 1, glm::value_ptr(color));
+            float pulse = 0.5f + 0.5f * static_cast<float>(sin(glfwGetTime() * 3.0f));
+            glUniform1f(brightnessLoc, pulse);
+        }
 
         float angle = (float)glfwGetTime();
         glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
@@ -267,7 +298,7 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
                 ? m_meshRegistry.at(key)
                 : m_meshRegistry.at("Cube");
             glBindVertexArray(mesh.vao);
-            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            glUniformMatrix4fv(USE_BLINN_PHONG ? m_litModelLoc : modelLoc, 1, GL_FALSE, glm::value_ptr(model));
             glDrawElements(GL_TRIANGLES, mesh.indexCount, GL_UNSIGNED_INT, 0);
         } else {
             glm::vec3 scale(1.0f);
@@ -277,12 +308,22 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
             else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
 
             model = glm::scale(model, scale);
-            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            glUniformMatrix4fv(USE_BLINN_PHONG ? m_litModelLoc : modelLoc, 1, GL_FALSE, glm::value_ptr(model));
             glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
         }
     }
 
     glBindVertexArray(0);
+
+    glUseProgram(shaderProgram);
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    if (USE_BLINN_PHONG) {
+        // When the lit shader was active for components, brightnessLoc was
+        // never touched this frame; without this it would default to 0 and
+        // axis/grid lines would render black. Restore full brightness here.
+        glUniform1f(brightnessLoc, 1.0f);
+    }
 
     glBindVertexArray(axisVAO);
     glm::mat4 axisModel = glm::mat4(1.0f);
@@ -305,7 +346,6 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
     }
 
     if (USE_BEZIER_WIRES) {
-        const glm::vec3 cameraPosition = glm::vec3(glm::inverse(view)[3]);
         m_wireRenderer.draw(
             graph.connections, graph.components,
             elapsedTime, view, projection,

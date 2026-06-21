@@ -318,6 +318,9 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+    constexpr int MSAA_SAMPLES = 4;
+    glfwWindowHint(GLFW_SAMPLES, MSAA_SAMPLES);
+
 
     // Create a windowed mode window and its OpenGL context
     GLFWwindow* window = glfwCreateWindow(screenWidth, screenHeight, "Welcome to Elec3D", NULL, NULL);

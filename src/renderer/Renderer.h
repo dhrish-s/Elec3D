@@ -29,6 +29,7 @@ public:
 
 private:
     unsigned int shaderProgram = 0;
+    unsigned int m_shaderLit = 0;
     unsigned int cubeVAO = 0;
     unsigned int cubeVBO = 0;
     unsigned int cubeEBO = 0;
@@ -45,10 +46,18 @@ private:
     std::map<std::string, Mesh> m_meshRegistry;
     static constexpr bool USE_BEZIER_WIRES = true;
     WireRenderer m_wireRenderer;
+    static constexpr bool USE_BLINN_PHONG = true;
 
     int modelLoc = -1;
     int viewLoc = -1;
     int projLoc = -1;
     int colorLoc = -1;
     int brightnessLoc = -1;
+
+    int m_litModelLoc = -1;
+    int m_litViewLoc = -1;
+    int m_litProjLoc = -1;
+    int m_litColorLoc = -1;
+    int m_litLightDirLoc = -1;
+    int m_litViewPosLoc = -1;
 };

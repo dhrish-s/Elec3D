@@ -8,8 +8,11 @@
 #include <glad/glad.h>
 
 /// A GPU-ready mesh: vertex buffer, index buffer, and draw count.
+/// build*() functions below interleave {x, y, z, nx, ny, nz} (stride 6).
+/// WireRenderer's signal sphere instead uploads position-only stride-3
+/// data through the same upload() entry point (see hasNormals below).
 struct Mesh {
-    std::vector<float> vertices;   // interleaved, matches cube.vert layout
+    std::vector<float> vertices;
     std::vector<uint32_t> indices;
     GLuint vao = 0;
     GLuint vbo = 0;
@@ -19,7 +22,10 @@ struct Mesh {
 
 namespace MeshBuilder {
     /// Upload CPU-side vertex and index data to GPU; fill vao/vbo/ebo.
-    void upload(Mesh& mesh);
+    /// hasNormals=false binds stride-3 position-only at location 0 (the
+    /// existing behavior WireRenderer's sphere mesh depends on); true
+    /// binds stride-6 position+normal at locations 0 and 1.
+    void upload(Mesh& mesh, bool hasNormals = false);
 
     /// Build battery: cylinder r=0.12, h=0.5, 16 sides, disc top/bottom caps.
     Mesh buildBattery();

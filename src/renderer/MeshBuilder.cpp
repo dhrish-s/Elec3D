@@ -34,15 +34,26 @@ constexpr float HELIX_TUBE_RADIUS = 0.025f;
 constexpr float HELIX_INSET = 0.015f;
 constexpr float CAP_DISC_THICKNESS = 0.025f;
 constexpr float DIODE_BASE_Z = -DIODE_HEIGHT * HALF;
-constexpr size_t POSITION_FLOAT_COUNT = 3;
+constexpr size_t VERTEX_FLOAT_COUNT = 6;
 
-/// Append one position-only vertex and return its index.
-uint32_t appendVertex(Mesh& mesh, float x, float y, float z)
+// Axis-aligned face normals, reused across every box-shaped mesh part.
+const glm::vec3 NORMAL_POS_X(1.0f, 0.0f, 0.0f);
+const glm::vec3 NORMAL_NEG_X(-1.0f, 0.0f, 0.0f);
+const glm::vec3 NORMAL_POS_Y(0.0f, 1.0f, 0.0f);
+const glm::vec3 NORMAL_NEG_Y(0.0f, -1.0f, 0.0f);
+const glm::vec3 NORMAL_POS_Z(0.0f, 0.0f, 1.0f);
+const glm::vec3 NORMAL_NEG_Z(0.0f, 0.0f, -1.0f);
+
+/// Append one interleaved position+normal vertex and return its index.
+uint32_t appendVertex(Mesh& mesh, const glm::vec3& pos, const glm::vec3& normal)
 {
-    mesh.vertices.push_back(x);
-    mesh.vertices.push_back(y);
-    mesh.vertices.push_back(z);
-    return static_cast<uint32_t>(mesh.vertices.size() / POSITION_FLOAT_COUNT) - 1u;
+    mesh.vertices.push_back(pos.x);
+    mesh.vertices.push_back(pos.y);
+    mesh.vertices.push_back(pos.z);
+    mesh.vertices.push_back(normal.x);
+    mesh.vertices.push_back(normal.y);
+    mesh.vertices.push_back(normal.z);
+    return static_cast<uint32_t>(mesh.vertices.size() / VERTEX_FLOAT_COUNT) - 1u;
 }
 
 /// Add one triangle to the mesh index buffer.
@@ -60,7 +71,21 @@ void appendQuad(Mesh& mesh, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
     appendTriangle(mesh, c, d, a);
 }
 
-/// Build a rectangular box centered at the origin.
+/// Add one flat quad face with its own 4 duplicated vertices and a single
+/// constant normal, so it never shares geometry with a neighboring face.
+void appendFlatQuad(Mesh& mesh, const glm::vec3& normal,
+                     const glm::vec3& p0, const glm::vec3& p1,
+                     const glm::vec3& p2, const glm::vec3& p3)
+{
+    const uint32_t a = appendVertex(mesh, p0, normal);
+    const uint32_t b = appendVertex(mesh, p1, normal);
+    const uint32_t c = appendVertex(mesh, p2, normal);
+    const uint32_t d = appendVertex(mesh, p3, normal);
+    appendQuad(mesh, a, b, c, d);
+}
+
+/// Build a rectangular box centered at the origin; each of the 6 faces
+/// gets its own 4 duplicated vertices and constant axis-aligned normal.
 Mesh buildBox(float length, float height, float depth)
 {
     Mesh mesh;
@@ -68,31 +93,31 @@ Mesh buildBox(float length, float height, float depth)
     const float hy = height * HALF;
     const float hz = depth * HALF;
 
-    const uint32_t v0 = appendVertex(mesh, -hx, -hy, -hz);
-    const uint32_t v1 = appendVertex(mesh,  hx, -hy, -hz);
-    const uint32_t v2 = appendVertex(mesh,  hx,  hy, -hz);
-    const uint32_t v3 = appendVertex(mesh, -hx,  hy, -hz);
-    const uint32_t v4 = appendVertex(mesh, -hx, -hy,  hz);
-    const uint32_t v5 = appendVertex(mesh,  hx, -hy,  hz);
-    const uint32_t v6 = appendVertex(mesh,  hx,  hy,  hz);
-    const uint32_t v7 = appendVertex(mesh, -hx,  hy,  hz);
+    const glm::vec3 p000(-hx, -hy, -hz);
+    const glm::vec3 p100(hx, -hy, -hz);
+    const glm::vec3 p110(hx, hy, -hz);
+    const glm::vec3 p010(-hx, hy, -hz);
+    const glm::vec3 p001(-hx, -hy, hz);
+    const glm::vec3 p101(hx, -hy, hz);
+    const glm::vec3 p111(hx, hy, hz);
+    const glm::vec3 p011(-hx, hy, hz);
 
-    appendQuad(mesh, v0, v1, v2, v3);
-    appendQuad(mesh, v4, v5, v6, v7);
-    appendQuad(mesh, v0, v1, v5, v4);
-    appendQuad(mesh, v2, v3, v7, v6);
-    appendQuad(mesh, v1, v2, v6, v5);
-    appendQuad(mesh, v0, v3, v7, v4);
+    appendFlatQuad(mesh, NORMAL_NEG_Z, p000, p100, p110, p010);
+    appendFlatQuad(mesh, NORMAL_POS_Z, p001, p101, p111, p011);
+    appendFlatQuad(mesh, NORMAL_NEG_Y, p000, p100, p101, p001);
+    appendFlatQuad(mesh, NORMAL_POS_Y, p010, p110, p111, p011);
+    appendFlatQuad(mesh, NORMAL_POS_X, p100, p110, p111, p101);
+    appendFlatQuad(mesh, NORMAL_NEG_X, p000, p010, p011, p001);
     return mesh;
 }
 
-/// Add a cylinder aligned to the Y axis.
+/// Add a cylinder aligned to the Y axis. The curved side wall is smoothly
+/// shaded (shared ring vertices, radial normal); the flat top/bottom caps
+/// get their own duplicated rim vertices so the cap-to-wall edge stays sharp.
 void appendCylinder(Mesh& mesh, float radius, float height, int sides)
 {
     const float bottomY = -height * HALF;
     const float topY = height * HALF;
-    const uint32_t bottomCenter = appendVertex(mesh, ZERO, bottomY, ZERO);
-    const uint32_t topCenter = appendVertex(mesh, ZERO, topY, ZERO);
 
     std::vector<uint32_t> bottomRing;
     std::vector<uint32_t> topRing;
@@ -103,18 +128,37 @@ void appendCylinder(Mesh& mesh, float radius, float height, int sides)
         const float angle = FULL_TURN * static_cast<float>(i) / static_cast<float>(sides);
         const float x = std::cos(angle) * radius;
         const float z = std::sin(angle) * radius;
-        bottomRing.push_back(appendVertex(mesh, x, bottomY, z));
-        topRing.push_back(appendVertex(mesh, x, topY, z));
+        const glm::vec3 radial = glm::normalize(glm::vec3(std::cos(angle), ZERO, std::sin(angle)));
+        bottomRing.push_back(appendVertex(mesh, glm::vec3(x, bottomY, z), radial));
+        topRing.push_back(appendVertex(mesh, glm::vec3(x, topY, z), radial));
     }
 
     for (int i = 0; i < sides; ++i) {
         const int next = (i + 1) % sides;
         appendQuad(mesh, bottomRing[static_cast<size_t>(i)], bottomRing[static_cast<size_t>(next)],
                    topRing[static_cast<size_t>(next)], topRing[static_cast<size_t>(i)]);
-        appendTriangle(mesh, bottomCenter, bottomRing[static_cast<size_t>(next)],
-                       bottomRing[static_cast<size_t>(i)]);
-        appendTriangle(mesh, topCenter, topRing[static_cast<size_t>(i)],
-                       topRing[static_cast<size_t>(next)]);
+    }
+
+    std::vector<uint32_t> bottomCapRing;
+    std::vector<uint32_t> topCapRing;
+    bottomCapRing.reserve(static_cast<size_t>(sides));
+    topCapRing.reserve(static_cast<size_t>(sides));
+    for (int i = 0; i < sides; ++i) {
+        const float angle = FULL_TURN * static_cast<float>(i) / static_cast<float>(sides);
+        const float x = std::cos(angle) * radius;
+        const float z = std::sin(angle) * radius;
+        bottomCapRing.push_back(appendVertex(mesh, glm::vec3(x, bottomY, z), NORMAL_NEG_Y));
+        topCapRing.push_back(appendVertex(mesh, glm::vec3(x, topY, z), NORMAL_POS_Y));
+    }
+    const uint32_t bottomCenter = appendVertex(mesh, glm::vec3(ZERO, bottomY, ZERO), NORMAL_NEG_Y);
+    const uint32_t topCenter = appendVertex(mesh, glm::vec3(ZERO, topY, ZERO), NORMAL_POS_Y);
+
+    for (int i = 0; i < sides; ++i) {
+        const int next = (i + 1) % sides;
+        appendTriangle(mesh, bottomCenter, bottomCapRing[static_cast<size_t>(next)],
+                       bottomCapRing[static_cast<size_t>(i)]);
+        appendTriangle(mesh, topCenter, topCapRing[static_cast<size_t>(i)],
+                       topCapRing[static_cast<size_t>(next)]);
     }
 }
 
@@ -125,35 +169,59 @@ void appendDisc(Mesh& mesh, float centerX, float radius, float thickness)
     appendCylinder(mesh, radius, thickness, CYLINDER_SIDES);
 
     // Disc plates are shifted along X so capacitor gaps are visible from the default view.
-    for (size_t i = vertexStart; i < mesh.vertices.size(); i += POSITION_FLOAT_COUNT) {
+    for (size_t i = vertexStart; i < mesh.vertices.size(); i += VERTEX_FLOAT_COUNT) {
         mesh.vertices[i] += centerX;
     }
 }
 
-/// Add a cone aligned to the Z axis.
+/// Add a cone aligned to the Z axis (apex at +Z, base ring at -Z). The slant
+/// side is smoothly shaded with the cone's true (non-radial) surface normal;
+/// the flat base cap gets its own duplicated rim vertices.
 void appendCone(Mesh& mesh, float radius, float height, int sides)
 {
-    const uint32_t baseCenter = appendVertex(mesh, ZERO, ZERO, -height * HALF);
-    const uint32_t apex = appendVertex(mesh, ZERO, ZERO, height * HALF);
-    std::vector<uint32_t> baseRing;
-    baseRing.reserve(static_cast<size_t>(sides));
+    std::vector<uint32_t> sideBaseRing;
+    std::vector<glm::vec3> slantNormals;
+    sideBaseRing.reserve(static_cast<size_t>(sides));
+    slantNormals.reserve(static_cast<size_t>(sides));
+
+    const float baseZ = -height * HALF;
+    const float apexZ = height * HALF;
 
     for (int i = 0; i < sides; ++i) {
         const float angle = FULL_TURN * static_cast<float>(i) / static_cast<float>(sides);
-        baseRing.push_back(appendVertex(mesh, std::cos(angle) * radius,
-                                        std::sin(angle) * radius, -height * HALF));
+        const float cosA = std::cos(angle);
+        const float sinA = std::sin(angle);
+        // Slant normal: axial component carries the base radius, radial
+        // components carry the height, per the cone's true (non-radial) surface.
+        const glm::vec3 slant = glm::normalize(glm::vec3(height * cosA, height * sinA, radius));
+        slantNormals.push_back(slant);
+        sideBaseRing.push_back(appendVertex(mesh, glm::vec3(cosA * radius, sinA * radius, baseZ), slant));
     }
 
     for (int i = 0; i < sides; ++i) {
         const int next = (i + 1) % sides;
-        appendTriangle(mesh, apex, baseRing[static_cast<size_t>(i)],
-                       baseRing[static_cast<size_t>(next)]);
-        appendTriangle(mesh, baseCenter, baseRing[static_cast<size_t>(next)],
-                       baseRing[static_cast<size_t>(i)]);
+        // Apex is duplicated per triangle (a true apex normal is undefined);
+        // reuse this wedge's own slant normal so shading stays smooth and outward.
+        const uint32_t apex = appendVertex(mesh, glm::vec3(ZERO, ZERO, apexZ), slantNormals[static_cast<size_t>(i)]);
+        appendTriangle(mesh, apex, sideBaseRing[static_cast<size_t>(i)], sideBaseRing[static_cast<size_t>(next)]);
+    }
+
+    std::vector<uint32_t> capRing;
+    capRing.reserve(static_cast<size_t>(sides));
+    for (int i = 0; i < sides; ++i) {
+        const float angle = FULL_TURN * static_cast<float>(i) / static_cast<float>(sides);
+        capRing.push_back(appendVertex(mesh, glm::vec3(std::cos(angle) * radius, std::sin(angle) * radius, baseZ),
+                                        NORMAL_NEG_Z));
+    }
+    const uint32_t baseCenter = appendVertex(mesh, glm::vec3(ZERO, ZERO, baseZ), NORMAL_NEG_Z);
+    for (int i = 0; i < sides; ++i) {
+        const int next = (i + 1) % sides;
+        appendTriangle(mesh, baseCenter, capRing[static_cast<size_t>(next)], capRing[static_cast<size_t>(i)]);
     }
 }
 
-/// Append one short tube section between helix samples.
+/// Append one short flat ribbon segment between helix samples; the whole
+/// quad shares one constant normal, oriented outward from the cylinder axis.
 void appendHelixSegment(Mesh& mesh, const glm::vec3& a, const glm::vec3& b)
 {
     const glm::vec3 tangent = glm::normalize(b - a);
@@ -162,12 +230,18 @@ void appendHelixSegment(Mesh& mesh, const glm::vec3& a, const glm::vec3& b)
     const glm::vec3 sideA = glm::normalize(glm::cross(tangent, radialA)) * HELIX_TUBE_RADIUS;
     const glm::vec3 sideB = glm::normalize(glm::cross(tangent, radialB)) * HELIX_TUBE_RADIUS;
 
-    // Four points form a tiny ribbon segment, enough to read as a coil without a normal attribute.
-    const uint32_t v0 = appendVertex(mesh, a.x + sideA.x, a.y + sideA.y, a.z + sideA.z);
-    const uint32_t v1 = appendVertex(mesh, a.x - sideA.x, a.y - sideA.y, a.z - sideA.z);
-    const uint32_t v2 = appendVertex(mesh, b.x - sideB.x, b.y - sideB.y, b.z - sideB.z);
-    const uint32_t v3 = appendVertex(mesh, b.x + sideB.x, b.y + sideB.y, b.z + sideB.z);
-    appendQuad(mesh, v0, v1, v2, v3);
+    const glm::vec3 p0 = a + sideA;
+    const glm::vec3 p1 = a - sideA;
+    const glm::vec3 p2 = b - sideB;
+    const glm::vec3 p3 = b + sideB;
+
+    glm::vec3 normal = glm::normalize(glm::cross(p1 - p0, p2 - p0));
+    const glm::vec3 midpointRadial = glm::normalize(glm::vec3((a.x + b.x) * HALF, ZERO, (a.z + b.z) * HALF));
+    if (glm::dot(normal, midpointRadial) < ZERO) {
+        normal = -normal;
+    }
+
+    appendFlatQuad(mesh, normal, p0, p1, p2, p3);
 }
 
 /// Add a raised helix on the inductor cylinder surface.
@@ -190,6 +264,8 @@ void appendHelix(Mesh& mesh)
 }
 
 /// Add two beveled end caps to make the resistor read differently from a cube.
+/// Each bevel triangle is its own face: 3 duplicated vertices, one constant
+/// normal computed via cross product and oriented away from the box center.
 void appendResistorBevels(Mesh& mesh)
 {
     const float x0 = -RESISTOR_LEN * HALF;
@@ -199,31 +275,43 @@ void appendResistorBevels(Mesh& mesh)
     const float innerLeft = x0 + BEVEL_DEPTH;
     const float innerRight = x1 - BEVEL_DEPTH;
 
-    const uint32_t leftTip = appendVertex(mesh, x0, ZERO, ZERO);
-    const uint32_t leftA = appendVertex(mesh, innerLeft, -y, -z);
-    const uint32_t leftB = appendVertex(mesh, innerLeft,  y, -z);
-    const uint32_t leftC = appendVertex(mesh, innerLeft,  y,  z);
-    const uint32_t leftD = appendVertex(mesh, innerLeft, -y,  z);
-    appendTriangle(mesh, leftTip, leftA, leftB);
-    appendTriangle(mesh, leftTip, leftB, leftC);
-    appendTriangle(mesh, leftTip, leftC, leftD);
-    appendTriangle(mesh, leftTip, leftD, leftA);
+    auto appendBevelTriangle = [&mesh](const glm::vec3& tip, const glm::vec3& p1, const glm::vec3& p2) {
+        glm::vec3 normal = glm::normalize(glm::cross(p1 - tip, p2 - tip));
+        const glm::vec3 faceCenter = (tip + p1 + p2) / 3.0f;
+        if (glm::dot(normal, faceCenter) < ZERO) {
+            normal = -normal;
+        }
+        const uint32_t a = appendVertex(mesh, tip, normal);
+        const uint32_t b = appendVertex(mesh, p1, normal);
+        const uint32_t c = appendVertex(mesh, p2, normal);
+        appendTriangle(mesh, a, b, c);
+    };
 
-    const uint32_t rightTip = appendVertex(mesh, x1, ZERO, ZERO);
-    const uint32_t rightA = appendVertex(mesh, innerRight, -y, -z);
-    const uint32_t rightB = appendVertex(mesh, innerRight,  y, -z);
-    const uint32_t rightC = appendVertex(mesh, innerRight,  y,  z);
-    const uint32_t rightD = appendVertex(mesh, innerRight, -y,  z);
-    appendTriangle(mesh, rightTip, rightB, rightA);
-    appendTriangle(mesh, rightTip, rightC, rightB);
-    appendTriangle(mesh, rightTip, rightD, rightC);
-    appendTriangle(mesh, rightTip, rightA, rightD);
+    const glm::vec3 leftTip(x0, ZERO, ZERO);
+    const glm::vec3 leftA(innerLeft, -y, -z);
+    const glm::vec3 leftB(innerLeft, y, -z);
+    const glm::vec3 leftC(innerLeft, y, z);
+    const glm::vec3 leftD(innerLeft, -y, z);
+    appendBevelTriangle(leftTip, leftA, leftB);
+    appendBevelTriangle(leftTip, leftB, leftC);
+    appendBevelTriangle(leftTip, leftC, leftD);
+    appendBevelTriangle(leftTip, leftD, leftA);
+
+    const glm::vec3 rightTip(x1, ZERO, ZERO);
+    const glm::vec3 rightA(innerRight, -y, -z);
+    const glm::vec3 rightB(innerRight, y, -z);
+    const glm::vec3 rightC(innerRight, y, z);
+    const glm::vec3 rightD(innerRight, -y, z);
+    appendBevelTriangle(rightTip, rightB, rightA);
+    appendBevelTriangle(rightTip, rightC, rightB);
+    appendBevelTriangle(rightTip, rightD, rightC);
+    appendBevelTriangle(rightTip, rightA, rightD);
 }
 
 /// Build one registry entry and log if GPU upload did not produce drawable handles.
 void addUploadedMesh(std::map<std::string, Mesh>& registry, const std::string& key, Mesh mesh)
 {
-    MeshBuilder::upload(mesh);
+    MeshBuilder::upload(mesh, true);
     if (mesh.vao == 0 || mesh.vbo == 0 || mesh.ebo == 0 || mesh.indexCount == 0) {
         std::cerr << "[Elec3D] MeshBuilder: failed to upload: " << key << "\n";
     }
@@ -233,7 +321,7 @@ void addUploadedMesh(std::map<std::string, Mesh>& registry, const std::string& k
 } // namespace
 
 /// Upload CPU-side vertex and index data to GPU; fill vao/vbo/ebo.
-void MeshBuilder::upload(Mesh& mesh)
+void MeshBuilder::upload(Mesh& mesh, bool hasNormals)
 {
     mesh.indexCount = static_cast<GLsizei>(mesh.indices.size());
     glGenVertexArrays(1, &mesh.vao);
@@ -249,8 +337,19 @@ void MeshBuilder::upload(Mesh& mesh)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                  static_cast<GLsizeiptr>(mesh.indices.size() * sizeof(uint32_t)),
                  mesh.indices.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
+
+    if (hasNormals) {
+        const GLsizei stride = 6 * static_cast<GLsizei>(sizeof(float));
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride,
+                               reinterpret_cast<void*>(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+    } else {
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+        glEnableVertexAttribArray(0);
+    }
+
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
@@ -279,7 +378,7 @@ Mesh MeshBuilder::buildCapacitor()
     appendDisc(mesh, CAP_GAP * HALF, CAP_DISC_RADIUS, CAP_DISC_THICKNESS);
 
     Mesh stub = buildBox(CAP_GAP, CAP_STUB_RADIUS, CAP_STUB_RADIUS);
-    const uint32_t indexOffset = static_cast<uint32_t>(mesh.vertices.size() / POSITION_FLOAT_COUNT);
+    const uint32_t indexOffset = static_cast<uint32_t>(mesh.vertices.size() / VERTEX_FLOAT_COUNT);
     mesh.vertices.insert(mesh.vertices.end(), stub.vertices.begin(), stub.vertices.end());
     for (uint32_t index : stub.indices) {
         mesh.indices.push_back(index + indexOffset);
@@ -304,8 +403,8 @@ Mesh MeshBuilder::buildDiode()
 
     // A base plate makes the diode direction readable even without lighting normals.
     Mesh base = buildBox(DIODE_BASE_R * TWO, DIODE_BASE_R * TWO, CAP_DISC_THICKNESS);
-    const uint32_t indexOffset = static_cast<uint32_t>(mesh.vertices.size() / POSITION_FLOAT_COUNT);
-    for (size_t i = 0; i < base.vertices.size(); i += POSITION_FLOAT_COUNT) {
+    const uint32_t indexOffset = static_cast<uint32_t>(mesh.vertices.size() / VERTEX_FLOAT_COUNT);
+    for (size_t i = 0; i < base.vertices.size(); i += VERTEX_FLOAT_COUNT) {
         base.vertices[i + 2u] += DIODE_BASE_Z - CAP_DISC_THICKNESS;
     }
     mesh.vertices.insert(mesh.vertices.end(), base.vertices.begin(), base.vertices.end());
