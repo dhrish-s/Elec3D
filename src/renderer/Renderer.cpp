@@ -18,6 +18,27 @@
 #include "MeshBuilder.h"
 #include "WireRenderer.h"
 
+namespace {
+constexpr float PCB_HALF_EXTENT = 0.5f;
+constexpr float PCB_UV_MIN = 0.0f;
+constexpr float PCB_UV_MAX = 1.0f;
+constexpr float PCB_LAYER_HEIGHT = 0.8f;
+constexpr float PCB_MARGIN = 1.0f;
+constexpr float PCB_MIN_SIZE = 1.0f;
+constexpr float PCB_Y_SCALE = 1.0f;
+constexpr float PCB_BOARD_R = 26.0f / 255.0f;
+constexpr float PCB_BOARD_G = 58.0f / 255.0f;
+constexpr float PCB_BOARD_B = 42.0f / 255.0f;
+constexpr float PCB_COPPER_R = 184.0f / 255.0f;
+constexpr float PCB_COPPER_G = 115.0f / 255.0f;
+constexpr float PCB_COPPER_B = 51.0f / 255.0f;
+constexpr int PCB_FLOATS_PER_VERTEX = 5;
+constexpr int PCB_POSITION_COMPONENT_COUNT = 3;
+constexpr int PCB_UV_COMPONENT_COUNT = 2;
+constexpr int PCB_INDEX_COUNT = 6;
+constexpr float PCB_MARGIN_SIDE_COUNT = 2.0f;
+}
+
 extern std::set<int> visibleLayers;
 extern bool showGrid;
 extern std::unordered_map<int, std::vector<PulseTrail>> pulseTrails;
@@ -198,6 +219,36 @@ bool Renderer::init()
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
 
+    const float pcbVertices[] = {
+        -PCB_HALF_EXTENT, 0.0f, -PCB_HALF_EXTENT, PCB_UV_MIN, PCB_UV_MIN,
+         PCB_HALF_EXTENT, 0.0f, -PCB_HALF_EXTENT, PCB_UV_MAX, PCB_UV_MIN,
+         PCB_HALF_EXTENT, 0.0f,  PCB_HALF_EXTENT, PCB_UV_MAX, PCB_UV_MAX,
+        -PCB_HALF_EXTENT, 0.0f,  PCB_HALF_EXTENT, PCB_UV_MIN, PCB_UV_MAX
+    };
+
+    const unsigned int pcbIndices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    glGenVertexArrays(1, &pcbVAO);
+    glGenBuffers(1, &pcbVBO);
+    glGenBuffers(1, &pcbEBO);
+    glBindVertexArray(pcbVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, pcbVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(pcbVertices), pcbVertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, pcbEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(pcbIndices), pcbIndices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, PCB_POSITION_COMPONENT_COUNT, GL_FLOAT, GL_FALSE,
+        PCB_FLOATS_PER_VERTEX * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, PCB_UV_COMPONENT_COUNT, GL_FLOAT, GL_FALSE,
+        PCB_FLOATS_PER_VERTEX * sizeof(float),
+        reinterpret_cast<void*>(PCB_POSITION_COMPONENT_COUNT * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
     shaderProgram = loadShaderProgram("../shaders/cube.vert", "../shaders/cube.frag");
     if (shaderProgram == 0) {
         return false;
@@ -227,6 +278,21 @@ bool Renderer::init()
     if (m_litModelLoc == -1 || m_litViewLoc == -1 || m_litProjLoc == -1 ||
         m_litColorLoc == -1 || m_litLightDirLoc == -1 || m_litViewPosLoc == -1 ||
         m_litUseInstancingLoc == -1) {
+        return false;
+    }
+
+    m_shaderPcb = loadShaderProgram("../shaders/pcb.vert", "../shaders/pcb.frag");
+    if (m_shaderPcb == 0) {
+        return false;
+    }
+
+    m_pcbModelLoc = findUniform(m_shaderPcb, "uModel");
+    m_pcbViewLoc = findUniform(m_shaderPcb, "uView");
+    m_pcbProjLoc = findUniform(m_shaderPcb, "uProjection");
+    m_pcbBoardColorLoc = findUniform(m_shaderPcb, "uBoardColor");
+    m_pcbCopperColorLoc = findUniform(m_shaderPcb, "uCopperColor");
+    if (m_pcbModelLoc == -1 || m_pcbViewLoc == -1 || m_pcbProjLoc == -1 ||
+        m_pcbBoardColorLoc == -1 || m_pcbCopperColorLoc == -1) {
         return false;
     }
 
@@ -290,6 +356,62 @@ void Renderer::ensureInstanceCapacity(InstanceBuffer& buf, int neededCount)
     buf.capacity = newCapacity;
 }
 
+/// Draw one board-sized rectangle for every visible layer that has at least
+/// one component. The geometry is scaled from the circuit's global X/Z bounds
+/// so all layers line up like a stacked PCB.
+void Renderer::drawPcbSubstrates(const CircuitGraph& graph,
+                                 const glm::mat4& view,
+                                 const glm::mat4& projection)
+{
+    if (graph.components.empty()) {
+        return;
+    }
+
+    float minX = graph.components.front().x;
+    float maxX = graph.components.front().x;
+    float minZ = graph.components.front().z;
+    float maxZ = graph.components.front().z;
+    std::set<int> layersToDraw;
+
+    for (const auto& c : graph.components) {
+        minX = std::min(minX, c.x);
+        maxX = std::max(maxX, c.x);
+        minZ = std::min(minZ, c.z);
+        maxZ = std::max(maxZ, c.z);
+
+        if (visibleLayers.count(c.layer) > 0) {
+            layersToDraw.insert(c.layer);
+        }
+    }
+
+    if (layersToDraw.empty()) {
+        return;
+    }
+
+    const float boardWidth = std::max((maxX - minX) + PCB_MARGIN * PCB_MARGIN_SIDE_COUNT, PCB_MIN_SIZE);
+    const float boardDepth = std::max((maxZ - minZ) + PCB_MARGIN * PCB_MARGIN_SIDE_COUNT, PCB_MIN_SIZE);
+    const float centerX = (minX + maxX) * PCB_HALF_EXTENT;
+    const float centerZ = (minZ + maxZ) * PCB_HALF_EXTENT;
+    const glm::vec3 boardColor(PCB_BOARD_R, PCB_BOARD_G, PCB_BOARD_B);
+    const glm::vec3 copperColor(PCB_COPPER_R, PCB_COPPER_G, PCB_COPPER_B);
+
+    glUseProgram(m_shaderPcb);
+    glUniformMatrix4fv(m_pcbViewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(m_pcbProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glUniform3fv(m_pcbBoardColorLoc, 1, glm::value_ptr(boardColor));
+    glUniform3fv(m_pcbCopperColorLoc, 1, glm::value_ptr(copperColor));
+
+    glBindVertexArray(pcbVAO);
+    for (int layer : layersToDraw) {
+        const float layerY = static_cast<float>(layer) * PCB_LAYER_HEIGHT;
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(centerX, layerY, centerZ));
+        model = glm::scale(model, glm::vec3(boardWidth, PCB_Y_SCALE, boardDepth));
+        glUniformMatrix4fv(m_pcbModelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        glDrawElements(GL_TRIANGLES, PCB_INDEX_COUNT, GL_UNSIGNED_INT, nullptr);
+    }
+    glBindVertexArray(0);
+}
+
 void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
                     float aspectRatio, float elapsedTime)
 {
@@ -327,6 +449,8 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
     const glm::mat4 view = camera.getView();
     const glm::mat4 projection = camera.getProjection(aspectRatio);
     const glm::vec3 cameraPosition = glm::vec3(glm::inverse(view)[3]);
+
+    drawPcbSubstrates(graph, view, projection);
 
     const unsigned int activeShader = USE_BLINN_PHONG ? m_shaderLit : shaderProgram;
     glUseProgram(activeShader);

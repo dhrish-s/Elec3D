@@ -54,9 +54,15 @@ private:
     /// reallocates when the existing capacity already fits the request.
     void ensureInstanceCapacity(InstanceBuffer& buf, int neededCount);
 
+    /// Draws one FR4-style PCB substrate under each visible circuit layer.
+    void drawPcbSubstrates(const CircuitGraph& graph,
+                           const glm::mat4& view,
+                           const glm::mat4& projection);
+
 
     unsigned int shaderProgram = 0;
     unsigned int m_shaderLit = 0;
+    unsigned int m_shaderPcb = 0;
     unsigned int cubeVAO = 0;
     unsigned int cubeVBO = 0;
     unsigned int cubeEBO = 0;
@@ -68,6 +74,9 @@ private:
     unsigned int axisVBO = 0;
     unsigned int gridVAO = 0;
     unsigned int gridVBO = 0;
+    unsigned int pcbVAO = 0;
+    unsigned int pcbVBO = 0;
+    unsigned int pcbEBO = 0;
 
     static constexpr bool USE_COMPONENT_MESHES = true;
     std::map<std::string, Mesh> m_meshRegistry;
@@ -90,4 +99,10 @@ private:
     int m_litLightDirLoc = -1;
     int m_litViewPosLoc = -1;
     int m_litUseInstancingLoc = -1;
+
+    int m_pcbModelLoc = -1;
+    int m_pcbViewLoc = -1;
+    int m_pcbProjLoc = -1;
+    int m_pcbBoardColorLoc = -1;
+    int m_pcbCopperColorLoc = -1;
 };
