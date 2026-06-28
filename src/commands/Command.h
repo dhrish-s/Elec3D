@@ -97,6 +97,14 @@ public:
         return !redoStack.empty();
     }
 
+    /// Clears both timelines when a full layout load replaces the whole graph.
+    void clear()
+    {
+        // Full-graph undo is out of scope, so old commands must not cross loads.
+        undoStack.clear();
+        redoStack.clear();
+    }
+
 private:
     std::deque<std::unique_ptr<Command>> undoStack;
     std::deque<std::unique_ptr<Command>> redoStack;
