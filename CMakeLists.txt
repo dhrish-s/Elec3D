@@ -51,6 +51,8 @@ set(IMGUI_SRC
 target_sources(Elec3D PRIVATE ${IMGUI_SRC})
 target_sources(Elec3D PRIVATE
     src/commands/AddComponentCommand.cpp
+    src/commands/ChangeLayerCommand.cpp
+    src/commands/ChangeTypeCommand.cpp
     src/commands/ConnectCommand.cpp
     src/commands/DeleteComponentCommand.cpp
     src/commands/EditPropertyCommand.cpp
