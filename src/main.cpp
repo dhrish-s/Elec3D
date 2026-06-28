@@ -772,8 +772,8 @@ int main()
             newComp.y = newY;
             newComp.z = newz;
 
-            // TODO(Phase4): wrap in Command via CommandHistory
-            components.push_back(newComp);
+            // Push owns the mutation, so undo can remove this exact component later.
+            commandHistory.push(std::make_unique<AddComponentCommand>(graph, newComp));
             simulationDirty = true;  // New circuit topology needs one fresh MNA solve.
 
             // === Handle auto-connect logic ===
@@ -798,8 +798,9 @@ int main()
             }
 
             if (nearestID != -1) {
-                // TODO(Phase4): wrap in Command via CommandHistory
-                connections.push_back({ newComp.id, nearestID });
+                Connection newConnection{ newComp.id, nearestID };
+                // Store the edge as a command so Ctrl+Z removes only this auto-link.
+                commandHistory.push(std::make_unique<ConnectCommand>(graph, newConnection));
                 simulationDirty = true;  // A new edge changes the conductance matrix.
                 pulseTrails[newComp.id * 1000 + nearestID].clear();
                 std::cout << "Auto-connected to nearest: " << nearestID << std::endl;
@@ -809,8 +810,9 @@ int main()
         {
             // Option 2: Connect to first
             if (newComp.id != 0) {
-                // TODO(Phase4): wrap in Command via CommandHistory
-                connections.push_back({ newComp.id, 0 });
+                Connection newConnection{ newComp.id, 0 };
+                // Keep this auto-link undoable as its own user-visible action.
+                commandHistory.push(std::make_unique<ConnectCommand>(graph, newConnection));
                 simulationDirty = true;  // A new edge changes the conductance matrix.
                 pulseTrails[newComp.id * 1000 + 0].clear();
                 std::cout << "Auto-connected to first component (ID 0)" << std::endl;
@@ -882,8 +884,9 @@ int main()
                     int fromID = (popupDirection == 0) ? lastAddedComponentId : targetID;
                     int toID   = (popupDirection == 0) ? targetID : lastAddedComponentId;
 
-                    // TODO(Phase4): wrap in Command via CommandHistory
-                    connections.push_back({ fromID, toID });
+                    Connection popupConnection{ fromID, toID };
+                    // Popup-created links follow the same undo path as manual links.
+                    commandHistory.push(std::make_unique<ConnectCommand>(graph, popupConnection));
                     simulationDirty = true;  // Popup connection changes circuit topology.
                     pulseTrails[fromID * 1000 + toID].clear();
 
@@ -974,8 +977,8 @@ int main()
             if (ImGui::Button("Add Connection")) {
                 if (fromID != toID) {
                     Connection newConn{ fromID, toID };
-                    // TODO(Phase4): wrap in Command via CommandHistory
-                    connections.push_back(newConn);
+                    // Manual edges become commands so undo removes the latest edge.
+                    commandHistory.push(std::make_unique<ConnectCommand>(graph, newConn));
                     simulationDirty = true;  // Manual connection changes circuit topology.
 
                     // Ensure trail is initialized (optional)
