@@ -405,6 +405,8 @@ int main()
     static int popupStrategy = 0;   // 0 = nearest, 1 = first
 
     static int groundComponentId = 0;
+    bool simulationDirty = true;  // First frame must solve once so cached voltages start valid.
+    std::vector<float> cachedNodeVoltages;
 
     // Inside render loop:
     while (!glfwWindowShouldClose(window)) {
@@ -453,13 +455,17 @@ int main()
         simulationGraph.components = components;
         simulationGraph.connections = connections;
 
-        std::vector<float> nodeVoltages;
-        if (activeGroundNodeId != -1) {
+        if (simulationDirty && activeGroundNodeId != -1) {
+            std::cerr << "[Elec3D] Simulation dirty — re-solving ("
+                      << components.size() << " components)\n";
             std::ostringstream solverLogSink;
             std::streambuf* originalCerr = std::cerr.rdbuf(solverLogSink.rdbuf());
-            nodeVoltages = MNASolver::solve(simulationGraph, activeGroundNodeId);
+            cachedNodeVoltages = MNASolver::solve(simulationGraph, activeGroundNodeId);
             std::cerr.rdbuf(originalCerr);
+            simulationDirty = false;  // Reuse this answer until UI edits change the circuit again.
         }
+
+        std::vector<float> nodeVoltages = cachedNodeVoltages;
 
         int maxComponentId = -1;
         for (const auto& c : components) {
@@ -716,6 +722,7 @@ int main()
                 bool selected = (groundComponentId == c.id);
                 if (ImGui::Selectable(std::to_string(c.id).c_str(), selected)) {
                     groundComponentId = c.id;
+                    simulationDirty = true;  // Ground changes redefine every node voltage reference.
                 }
                 if (selected) ImGui::SetItemDefaultFocus();
             }
@@ -756,6 +763,7 @@ int main()
 
             // TODO(Phase4): wrap in Command via CommandHistory
             components.push_back(newComp);
+            simulationDirty = true;  // New circuit topology needs one fresh MNA solve.
 
             // === Handle auto-connect logic ===
         if (autoConnectMode == 1 && !components.empty()) 
@@ -781,6 +789,7 @@ int main()
             if (nearestID != -1) {
                 // TODO(Phase4): wrap in Command via CommandHistory
                 connections.push_back({ newComp.id, nearestID });
+                simulationDirty = true;  // A new edge changes the conductance matrix.
                 pulseTrails[newComp.id * 1000 + nearestID].clear();
                 std::cout << "Auto-connected to nearest: " << nearestID << std::endl;
             }
@@ -791,6 +800,7 @@ int main()
             if (newComp.id != 0) {
                 // TODO(Phase4): wrap in Command via CommandHistory
                 connections.push_back({ newComp.id, 0 });
+                simulationDirty = true;  // A new edge changes the conductance matrix.
                 pulseTrails[newComp.id * 1000 + 0].clear();
                 std::cout << "Auto-connected to first component (ID 0)" << std::endl;
             }
@@ -863,6 +873,7 @@ int main()
 
                     // TODO(Phase4): wrap in Command via CommandHistory
                     connections.push_back({ fromID, toID });
+                    simulationDirty = true;  // Popup connection changes circuit topology.
                     pulseTrails[fromID * 1000 + toID].clear();
 
                     std::cout << "Auto-connected via popup: " << fromID << " - > " << toID << std::endl;
@@ -954,6 +965,7 @@ int main()
                     Connection newConn{ fromID, toID };
                     // TODO(Phase4): wrap in Command via CommandHistory
                     connections.push_back(newConn);
+                    simulationDirty = true;  // Manual connection changes circuit topology.
 
                     // Ensure trail is initialized (optional)
                     int connKey = fromID * 1000 + toID;
@@ -991,6 +1003,7 @@ int main()
 
                 components = loadedGraph.components;
                 connections = loadedGraph.connections;
+                simulationDirty = true;  // Loaded files replace the circuit being solved.
 
                 for(const auto& c: components)
                 {
@@ -1076,6 +1089,7 @@ int main()
                 if (ImGui::Combo("Type", &currentTypeIndex, compTypes, IM_ARRAYSIZE(compTypes))) {
                     // TODO(Phase4): wrap in Command via CommandHistory
                     selected->type = compTypes[currentTypeIndex];
+                    simulationDirty = true;  // Component type changes which electrical model MNA sees.
 
                     // Auto-assign default resistance and voltage
                     // TODO(Phase4): wrap in EditPropertyCommand
@@ -1114,31 +1128,49 @@ int main()
 
                 if (selected->type == "Battery") {
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
+                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
+                    }
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Voltage Source (V)", &selected->voltageSource);
+                    if (ImGui::InputFloat("Voltage Source (V)", &selected->voltageSource)) {
+                        simulationDirty = true;  // Source voltage changes the RHS vector.
+                    }
                 } else if (selected->type == "Resistor") {
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
+                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
+                    }
                 } else if (selected->type == "Capacitor") {
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Capacitance (F)", &selected->capacitance);
+                    if (ImGui::InputFloat("Capacitance (F)", &selected->capacitance)) {
+                        simulationDirty = true;  // Capacitance affects transient and future solver states.
+                    }
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
+                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
+                    }
                 } else if (selected->type == "Inductor") {
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Inductance (H)", &selected->inductance);
+                    if (ImGui::InputFloat("Inductance (H)", &selected->inductance)) {
+                        simulationDirty = true;  // Inductance affects transient and future solver states.
+                    }
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
+                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
+                    }
                 } else if (selected->type == "Diode") {
                     // TODO(Phase4): wrap in EditPropertyCommand
-                    ImGui::InputFloat("Resistance (Ohms)", &selected->resistance);
+                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
+                        simulationDirty = true;  // Diode resistance is the current linearized approximation.
+                    }
                 }
 
                 // === Editable Voltage for Battery ===
                 if (selected->type == "Battery") {
                     // TODO(Phase4): wrap in Command via CommandHistory
-                    ImGui::InputFloat("Voltage (V)", &selected->voltage);
+                    if (ImGui::InputFloat("Voltage (V)", &selected->voltage)) {
+                        simulationDirty = true;  // Keep cached display voltages aligned with battery edits.
+                    }
                 }
         
                 ImGui::Text("Editing ID: %d", selected->id);
