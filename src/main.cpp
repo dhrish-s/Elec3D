@@ -74,6 +74,28 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (action == GLFW_PRESS) {
+        const bool ctrlDown = (mods & GLFW_MOD_CONTROL) != 0;
+        const bool imguiWantsKeyboard =
+            ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureKeyboard;
+
+        // Undo/redo should not steal keystrokes while the user is typing in ImGui.
+        if (ctrlDown && !imguiWantsKeyboard && key == GLFW_KEY_Z) {
+            if (commandHistory.canUndo()) {
+                commandHistory.undo();
+                simulationDirty = true;  // Undo may change values/topology, so solve once again.
+            }
+            return;
+        }
+
+        // Redo mirrors undo and marks the solver cache stale for the replayed edit.
+        if (ctrlDown && !imguiWantsKeyboard && key == GLFW_KEY_Y) {
+            if (commandHistory.canRedo()) {
+                commandHistory.redo();
+                simulationDirty = true;  // Redo reapplies a model change that voltages depend on.
+            }
+            return;
+        }
+
         int layer = key - GLFW_KEY_0;  // Maps '1' -> 1, '2' -> 2, etc.
         if (layer >= 0 && layer <= 9) {
             if (visibleLayers.count(layer))
