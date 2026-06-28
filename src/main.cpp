@@ -491,7 +491,7 @@ int main()
         simulationGraph.connections = connections;
 
         if (simulationDirty && activeGroundNodeId != -1) {
-            std::cerr << "[Elec3D] Simulation dirty — re-solving ("
+            std::cerr << "[Elec3D] Simulation dirty -  re-solving ("
                       << components.size() << " components)\n";
             std::ostringstream solverLogSink;
             std::streambuf* originalCerr = std::cerr.rdbuf(solverLogSink.rdbuf());
@@ -510,7 +510,7 @@ int main()
         }
         if (nodeVoltages.empty() && maxComponentId >= 0) {
             if (!solveFailureLogged) {
-                std::cerr << "[Elec3D] Voltage solve failed — circuit may be disconnected\n";
+                std::cerr << "[Elec3D] Voltage solve failed -  circuit may be disconnected\n";
                 solveFailureLogged = true;
             }
             nodeVoltages.assign(static_cast<size_t>(maxComponentId + 1), 0.0f);

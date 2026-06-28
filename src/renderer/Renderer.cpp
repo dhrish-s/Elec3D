@@ -420,7 +420,7 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
     // per second so it never floods stderr during normal use.
     // Tracks two numbers: total inter-frame time (includes the caller's
     // per-frame simulation work in main.cpp, outside this function) and
-    // render-only time (just this draw() call) — this separation matters
+    // render-only time (just this draw() call) -  this separation matters
     // because the simulation solve, not rendering, can dominate at scale.
     static double lastFrameTime = 0.0;
     static double lastFpsReportTime = 0.0;

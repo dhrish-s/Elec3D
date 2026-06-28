@@ -19,7 +19,7 @@ void main() {
     vColor = uUseInstancing ? aInstanceColor : uColor;
     vFragPos = vec3(model * vec4(aPos, 1.0));
     // Inverse-transpose handles rotation correctly even though most model
-    // matrices here are translation-only — components do rotate per frame.
+    // matrices here are translation-only -  components do rotate per frame.
     mat3 normalMatrix = mat3(transpose(inverse(model)));
     vNormal = normalize(normalMatrix * aNormal);
     gl_Position = uProjection * uView * vec4(vFragPos, 1.0);
