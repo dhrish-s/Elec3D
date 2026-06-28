@@ -1140,43 +1140,38 @@ int main()
                     }
                 }
 
+                auto editFloatProperty = [&](const char* label, const char* propertyName, float& value) {
+                    static std::unordered_map<std::string, float> editStartValues;
+                    const std::string editKey = std::to_string(selected->id) + ":" + propertyName;
+
+                    // ImGui edits the float live, so capture the old value before typing starts.
+                    ImGui::InputFloat(label, &value);
+                    if (ImGui::IsItemActivated()) {
+                        editStartValues[editKey] = value;
+                    }
+
+                    // When editing ends, store one clean undo command instead of one per keystroke.
+                    if (ImGui::IsItemDeactivatedAfterEdit()) {
+                        const float oldValue = editStartValues.count(editKey) ? editStartValues[editKey] : value;
+                        commandHistory.push(std::make_unique<EditPropertyCommand>(
+                            graph, selected->id, propertyName, oldValue, value));
+                        simulationDirty = true;  // Electrical values changed, so cached MNA output is stale.
+                    }
+                };
+
                 if (selected->type == "Battery") {
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
-                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
-                    }
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Voltage Source (V)", &selected->voltageSource)) {
-                        simulationDirty = true;  // Source voltage changes the RHS vector.
-                    }
+                    editFloatProperty("Resistance (Ohms)", "resistance", selected->resistance);
+                    editFloatProperty("Voltage Source (V)", "voltageSource", selected->voltageSource);
                 } else if (selected->type == "Resistor") {
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
-                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
-                    }
+                    editFloatProperty("Resistance (Ohms)", "resistance", selected->resistance);
                 } else if (selected->type == "Capacitor") {
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Capacitance (F)", &selected->capacitance)) {
-                        simulationDirty = true;  // Capacitance affects transient and future solver states.
-                    }
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
-                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
-                    }
+                    editFloatProperty("Capacitance (F)", "capacitance", selected->capacitance);
+                    editFloatProperty("Resistance (Ohms)", "resistance", selected->resistance);
                 } else if (selected->type == "Inductor") {
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Inductance (H)", &selected->inductance)) {
-                        simulationDirty = true;  // Inductance affects transient and future solver states.
-                    }
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
-                        simulationDirty = true;  // Resistance changes conductance in the MNA matrix.
-                    }
+                    editFloatProperty("Inductance (H)", "inductance", selected->inductance);
+                    editFloatProperty("Resistance (Ohms)", "resistance", selected->resistance);
                 } else if (selected->type == "Diode") {
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (ImGui::InputFloat("Resistance (Ohms)", &selected->resistance)) {
-                        simulationDirty = true;  // Diode resistance is the current linearized approximation.
-                    }
+                    editFloatProperty("Resistance (Ohms)", "resistance", selected->resistance);
                 }
 
                 // === Editable Voltage for Battery ===
