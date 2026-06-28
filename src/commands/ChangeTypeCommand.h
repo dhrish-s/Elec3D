@@ -9,6 +9,7 @@ constexpr float DEFAULT_RESISTANCE = 1.0f;
 constexpr float DEFAULT_CAPACITANCE = 0.0f;
 constexpr float DEFAULT_INDUCTANCE = 0.0f;
 constexpr float DEFAULT_VOLTAGE_SOURCE = 0.0f;
+constexpr float REACTIVE_DEFAULT_RESISTANCE = 0.0f;
 constexpr float BATTERY_VOLTAGE_SOURCE = 5.0f;
 constexpr float BATTERY_DEFAULT_RESISTANCE = 0.1f;
 constexpr float CAPACITOR_DEFAULT_CAPACITANCE = 0.5f;

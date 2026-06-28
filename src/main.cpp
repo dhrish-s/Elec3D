@@ -23,6 +23,8 @@
 #include<unordered_set>
 
 #include "commands/AddComponentCommand.h"
+#include "commands/ChangeLayerCommand.h"
+#include "commands/ChangeTypeCommand.h"
 #include "commands/Command.h"
 #include "commands/ConnectCommand.h"
 #include "commands/DeleteComponentCommand.h"
@@ -1029,7 +1031,9 @@ int main()
             {
                 CircuitGraph loadedGraph = LayoutSerializer::load("output_layout.json");
 
-                // TODO(Phase4): wrap in Command via CommandHistory
+                // Layout load clears history because full-graph undo is out of scope.
+                commandHistory.clear();
+
                 // Clear existing components and connections
                 components.clear();
                 connections.clear();
@@ -1123,43 +1127,39 @@ int main()
                     }
                 }
                 if (ImGui::Combo("Type", &currentTypeIndex, compTypes, IM_ARRAYSIZE(compTypes))) {
-                    // TODO(Phase4): wrap in Command via CommandHistory
-                    selected->type = compTypes[currentTypeIndex];
-                    simulationDirty = true;  // Component type changes which electrical model MNA sees.
+                    const std::string oldType = selected->type;
+                    const float oldResistance = selected->resistance;
+                    const float oldCapacitance = selected->capacitance;
+                    const float oldInductance = selected->inductance;
+                    const float oldVoltageSource = selected->voltageSource;
 
-                    // Auto-assign default resistance and voltage
-                    // TODO(Phase4): wrap in EditPropertyCommand
-                    if (selected->type == "Resistor") {
-                        selected->resistance = 1.0f;
-                        selected->capacitance = 0.0f;
-                        selected->inductance = 0.0f;
-                        selected->voltageSource = 0.0f;
+                    // Start from neutral defaults, then override only what each type needs.
+                    const std::string newType = compTypes[currentTypeIndex];
+                    float newResistance = DEFAULT_RESISTANCE;
+                    float newCapacitance = DEFAULT_CAPACITANCE;
+                    float newInductance = DEFAULT_INDUCTANCE;
+                    float newVoltageSource = DEFAULT_VOLTAGE_SOURCE;
+
+                    // These branches preserve the existing Elec3D type defaults by name.
+                    if (newType == "Capacitor") {
+                        newResistance = REACTIVE_DEFAULT_RESISTANCE;
+                        newCapacitance = CAPACITOR_DEFAULT_CAPACITANCE;
+                    } else if (newType == "Inductor") {
+                        newResistance = REACTIVE_DEFAULT_RESISTANCE;
+                        newInductance = INDUCTOR_DEFAULT_INDUCTANCE;
+                    } else if (newType == "Diode") {
+                        newResistance = DIODE_DEFAULT_RESISTANCE;
+                    } else if (newType == "Battery") {
+                        newResistance = BATTERY_DEFAULT_RESISTANCE;
+                        newVoltageSource = BATTERY_VOLTAGE_SOURCE;
                     }
-                    else if (selected->type == "Capacitor") {
-                        selected->resistance = 0.0f;
-                        selected->capacitance = 0.5f;
-                        selected->inductance = 0.0f;
-                        selected->voltageSource = 0.0f;
-                    }
-                    else if (selected->type == "Inductor") {
-                        selected->resistance = 0.0f;
-                        selected->capacitance = 0.0f;
-                        selected->inductance = 0.8f;
-                        selected->voltageSource = 0.0f;
-                    }
-                    else if (selected->type == "Diode") {
-                        selected->resistance = 2.0f;
-                        selected->capacitance = 0.0f;
-                        selected->inductance = 0.0f;
-                        selected->voltageSource = 0.0f;
-                    }
-                    else if (selected->type == "Battery") {
-                        selected->resistance = 0.1f;
-                        selected->voltage = 5.0f;  // Default battery value
-                        selected->capacitance = 0.0f;
-                        selected->inductance = 0.0f;
-                        selected->voltageSource = 5.0f;
-                    }
+
+                    // One command owns both the type string and its bundled defaults.
+                    commandHistory.push(std::make_unique<ChangeTypeCommand>(
+                        graph, selected->id,
+                        oldType, oldResistance, oldCapacitance, oldInductance, oldVoltageSource,
+                        newType, newResistance, newCapacitance, newInductance, newVoltageSource));
+                    simulationDirty = true;  // Component type changes which electrical model MNA sees.
                 }
 
                 auto editFloatProperty = [&](const char* label, const char* propertyName, float& value) {
@@ -1248,8 +1248,24 @@ int main()
                     simulationDirty = true;  // Wire paths depend on component position.
                 }
 
-                // TODO(Phase4): wrap in Command via CommandHistory
+                static std::unordered_map<int, int> layerStartValues;
+
+                // Capture the old layer before ImGui mutates the integer live.
                 ImGui::InputInt("Layer", &selected->layer);
+                if (ImGui::IsItemActivated()) {
+                    layerStartValues[selected->id] = selected->layer;
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    const int oldLayer = layerStartValues.count(selected->id)
+                        ? layerStartValues[selected->id] : selected->layer;
+                    const int newLayerValue = selected->layer;
+
+                    // Layer is an int field, so it has its own narrow command.
+                    commandHistory.push(std::make_unique<ChangeLayerCommand>(
+                        graph, selected->id, oldLayer, newLayerValue));
+                    visibleLayers.insert(newLayerValue);
+                    simulationDirty = true;  // Rendering and graph checks depend on layer visibility.
+                }
         
                 if (ImGui::Button("Close")) {
                     selectedComponentId = -1;  // Deselect
