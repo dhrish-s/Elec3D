@@ -1176,18 +1176,56 @@ int main()
 
                 // === Editable Voltage for Battery ===
                 if (selected->type == "Battery") {
-                    // TODO(Phase4): wrap in Command via CommandHistory
-                    if (ImGui::InputFloat("Voltage (V)", &selected->voltage)) {
-                        simulationDirty = true;  // Keep cached display voltages aligned with battery edits.
-                    }
+                    editFloatProperty("Voltage (V)", "voltage", selected->voltage);
                 }
         
                 ImGui::Text("Editing ID: %d", selected->id);
                 
-                // TODO(Phase4): wrap in Command via CommandHistory
+                static std::unordered_map<int, glm::vec3> moveStartPositions;
+                const glm::vec3 currentPosition(selected->x, selected->y, selected->z);
+
+                // Capture the full position before any one axis starts changing.
                 ImGui::InputFloat("X", &selected->x);
+                if (ImGui::IsItemActivated()) {
+                    moveStartPositions[selected->id] = currentPosition;
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    const glm::vec3 oldPosition = moveStartPositions.count(selected->id)
+                        ? moveStartPositions[selected->id] : currentPosition;
+                    const glm::vec3 newPosition(selected->x, selected->y, selected->z);
+                    commandHistory.push(std::make_unique<MoveComponentCommand>(
+                        graph, selected->id, oldPosition, newPosition));
+                    simulationDirty = true;  // Moving components changes wire lengths and solver topology layout.
+                }
+
+                // Y uses the same command path so each completed axis edit is undoable.
                 ImGui::InputFloat("Y", &selected->y);
+                if (ImGui::IsItemActivated()) {
+                    moveStartPositions[selected->id] = currentPosition;
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    const glm::vec3 oldPosition = moveStartPositions.count(selected->id)
+                        ? moveStartPositions[selected->id] : currentPosition;
+                    const glm::vec3 newPosition(selected->x, selected->y, selected->z);
+                    commandHistory.push(std::make_unique<MoveComponentCommand>(
+                        graph, selected->id, oldPosition, newPosition));
+                    simulationDirty = true;  // Cached render/sim state must observe the new position.
+                }
+
+                // Z completes the position editor without introducing a separate command class.
                 ImGui::InputFloat("Z", &selected->z);
+                if (ImGui::IsItemActivated()) {
+                    moveStartPositions[selected->id] = currentPosition;
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    const glm::vec3 oldPosition = moveStartPositions.count(selected->id)
+                        ? moveStartPositions[selected->id] : currentPosition;
+                    const glm::vec3 newPosition(selected->x, selected->y, selected->z);
+                    commandHistory.push(std::make_unique<MoveComponentCommand>(
+                        graph, selected->id, oldPosition, newPosition));
+                    simulationDirty = true;  // Wire paths depend on component position.
+                }
+
                 // TODO(Phase4): wrap in Command via CommandHistory
                 ImGui::InputInt("Layer", &selected->layer);
         
