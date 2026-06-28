@@ -50,6 +50,11 @@ set(IMGUI_SRC
 #adding the above files to the source files
 target_sources(Elec3D PRIVATE ${IMGUI_SRC})
 target_sources(Elec3D PRIVATE
+    src/commands/AddComponentCommand.cpp
+    src/commands/ConnectCommand.cpp
+    src/commands/DeleteComponentCommand.cpp
+    src/commands/EditPropertyCommand.cpp
+    src/commands/MoveComponentCommand.cpp
     src/circuit/Circuit.cpp
     src/io/LayoutSerializer.cpp
     src/renderer/MeshBuilder.cpp
