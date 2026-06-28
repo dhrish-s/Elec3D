@@ -22,6 +22,12 @@
 #include <Eigen/Dense>
 #include<unordered_set>
 
+#include "commands/AddComponentCommand.h"
+#include "commands/Command.h"
+#include "commands/ConnectCommand.h"
+#include "commands/DeleteComponentCommand.h"
+#include "commands/EditPropertyCommand.h"
+#include "commands/MoveComponentCommand.h"
 #include "circuit/Circuit.h"
 #include "io/LayoutSerializer.h"
 #include "renderer/Camera.h"
@@ -45,6 +51,9 @@ Camera camera;
 
 
 bool showGrid = true;  // Toggle visibility
+
+CommandHistory commandHistory;
+bool simulationDirty = true;
 
 //Now voltage
 std::unordered_map<int, std::deque<float>> voltageHistory;
@@ -371,8 +380,10 @@ int main()
     std::cout << "Current working directory: " << std::filesystem::current_path() << std::endl;
 
     CircuitGraph graph = LayoutSerializer::load("src/layout.json");
-    std::vector<Component> components = graph.components;
-    std::vector<Connection> connections = graph.connections;
+    // Keep one shared graph model so commands and rendering edit the same data.
+    std::vector<Component>& components = graph.components;
+    // Connections live beside components because every command edits graph topology.
+    std::vector<Connection>& connections = graph.connections;
     std::cerr << "[Elec3D] Loaded " << components.size() << " components\n";
     std::cerr << "[Elec3D] Loaded " << connections.size() << " connections\n";
     if (!connections.empty()) {
@@ -405,7 +416,7 @@ int main()
     static int popupStrategy = 0;   // 0 = nearest, 1 = first
 
     static int groundComponentId = 0;
-    bool simulationDirty = true;  // First frame must solve once so cached voltages start valid.
+    simulationDirty = true;  // First frame must solve once so cached voltages start valid.
     std::vector<float> cachedNodeVoltages;
 
     // Inside render loop:
