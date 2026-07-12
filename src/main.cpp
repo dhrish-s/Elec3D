@@ -638,29 +638,28 @@ int main()
         for (const auto& c : components)
             allLayers.insert(c.layer);
 
-        ImGui::SetNextWindowPos(ImVec2(10, 120), ImGuiCond_Once);
-        ImGui::Begin("Layer Control", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::Text("Toggle Layers:");
-        for (int layer : allLayers) {
-            bool isVisible = visibleLayers.count(layer);
-            std::string label = "Layer " + std::to_string(layer);
-            if (ImGui::Checkbox(label.c_str(), &isVisible)) {
-                if (isVisible) visibleLayers.insert(layer);
-                else visibleLayers.erase(layer);
+        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(380, 520), ImGuiCond_Once);
+        ImGui::Begin("Elec3D Control Panel");
+        ImGui::BeginTabBar("ControlPanelTabs");
+
+        if (ImGui::BeginTabItem("Layers")) {
+            ImGui::Text("Toggle Layers:");
+            for (int layer : allLayers) {
+                bool isVisible = visibleLayers.count(layer);
+                std::string label = "Layer " + std::to_string(layer);
+                if (ImGui::Checkbox(label.c_str(), &isVisible)) {
+                    if (isVisible) visibleLayers.insert(layer);
+                    else visibleLayers.erase(layer);
+                }
             }
+            ImGui::Separator();
+            ImGui::Checkbox("Show Grid", &showGrid);
+            ImGui::EndTabItem();
         }
-        ImGui::End();
 
-        ImGui::SetNextWindowPos(ImVec2(10, 250), ImGuiCond_Once);
-        ImGui::Begin("Display Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::Checkbox("Show Grid", &showGrid);
-        ImGui::End();
-
-        // For voltage display, we can use a simple ImGui window
-        ImGui::SetNextWindowPos(ImVec2(10, 400), ImGuiCond_Once);
-        ImGui::Begin("Voltage Watcher", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
-        ImGui::Text(" Select Component to watch:");
+        if (ImGui::BeginTabItem("Watch")) {
+            ImGui::Text(" Select Component to watch:");
         if (ImGui::BeginCombo("##WatchCombo", watchedComponentId == -1 ? "None" : std::to_string(watchedComponentId).c_str())) { 
             if (ImGui::Selectable("None", watchedComponentId == -1)) {
                 watchedComponentId = -1;
@@ -698,11 +697,10 @@ int main()
                              ImVec2(0, 60));
         }
                     
-        ImGui::End(); // End of Voltage Watcher window
+            ImGui::EndTabItem();
+        } // End of Watch tab
 
-        ImGui::SetNextWindowPos(ImVec2(330, 400), ImGuiCond_Once);
-        ImGui::Begin("Transient Sim", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-        if (ImGui::CollapsingHeader("Transient Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::BeginTabItem("Transient")) {
             ImGui::SliderFloat("dt (s)", &transientDt,
                                1e-6f, 1e-3f, "%.2e");
             ImGui::SliderFloat("Total (s)", &transientTotal,
@@ -751,19 +749,17 @@ int main()
                                  ImVec2(0, 80));
             }
             ImGui::Text("Samples: %d", (int)transientResult.size());
-        }
-        ImGui::End();
+            ImGui::EndTabItem();
+        } // End of Transient tab
 
         // Now we will do component type selection in the UI
         static int selectedType = 0;
         const char* componentTypes[] = { "Resistor", "Capacitor", "Inductor", "Diode" };
-        static int newLayer = 1; // Default to layer 1  
+        static int newLayer = 1; // Default to layer 1
         static float newX = 0.0f, newY = 0.0f, newz = 0.0f;
 
-
-        ImGui::SetNextWindowPos(ImVec2(10, 600), ImGuiCond_Once);
-        ImGui::Begin("Simulation Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::Text("Choose Ground Node:");
+        if (ImGui::BeginTabItem("Simulation")) {
+            ImGui::Text("Choose Ground Node:");
 
         if (ImGui::BeginCombo("##GroundSelector", std::to_string(groundComponentId).c_str())) {
             for (const auto& c : components) {
@@ -776,12 +772,10 @@ int main()
             }
             ImGui::EndCombo();
         }
-        ImGui::End();
+            ImGui::EndTabItem();
+        } // End of Simulation tab
 
-
-        ImGui::SetNextWindowPos(ImVec2(10, 300), ImGuiCond_Once);
-        ImGui::Begin("Add Component", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
+        if (ImGui::BeginTabItem("Add Component")) {
         ImGui::Text("Select Component Type:");
         ImGui::Combo("##Type", &selectedType, componentTypes, IM_ARRAYSIZE(componentTypes));
         
@@ -872,7 +866,8 @@ int main()
             << ") at [" << newComp.x << ", " << newComp.y << ", " << newComp.z
             << "] on layer " << newComp.layer << std::endl;
         }
-        ImGui::End();
+            ImGui::EndTabItem();
+        } // End of Add Component tab
 
         // === POPUP: Connect Newly Added Component ===
         if (showConnectionPopup) {
@@ -952,9 +947,7 @@ int main()
             static int fromID = 0;
             static int toID = 0;
 
-            ImGui::SetNextWindowPos(ImVec2(10, 450), ImGuiCond_Once);
-            ImGui::Begin("Connect Components", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
+        if (ImGui::BeginTabItem("Connect")) {
             // Dropdowns for component IDs
             ImGui::Text("From Component ID:");
             if (ImGui::BeginCombo("##fromCombo", std::to_string(fromID).c_str())) {
@@ -1072,10 +1065,11 @@ int main()
                 std::cout << "Layout loaded from output_layout.json\n";
             }
 
+            ImGui::EndTabItem();
+        } // End of Connect tab
 
-
-
-            ImGui::End();
+        ImGui::EndTabBar();
+        ImGui::End(); // End of Elec3D Control Panel
 
 
 
