@@ -597,12 +597,23 @@ int main()
 
         // === CLICK SELECTION ===
         static bool wasMouseDown = false;
+        static bool wasPressOverImGui = false;
         bool isMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-        
-        if (!isMouseDown && wasMouseDown) {
+
+        const bool imguiWantsMouse =
+            ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
+        if (isMouseDown && !wasMouseDown) {
+            // Remember the press origin so closing a popup cannot leak its release into viewport selection.
+            wasPressOverImGui = imguiWantsMouse;
+        }
+
+        if (!isMouseDown && wasMouseDown && !imguiWantsMouse && !wasPressOverImGui) {
             selectedComponentId = hoverComponentId;
         }
-        
+        if (!isMouseDown && wasMouseDown) {
+            wasPressOverImGui = false;
+        }
+
         wasMouseDown = isMouseDown;
         
 
