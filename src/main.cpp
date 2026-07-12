@@ -100,7 +100,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
 
         int layer = key - GLFW_KEY_0;  // Maps '1' -> 1, '2' -> 2, etc.
-        if (layer >= 0 && layer <= 9) {
+        // Number keys edit the active ImGui field instead of changing layer visibility.
+        if (!imguiTextActive && layer >= 0 && layer <= 9) {
             if (visibleLayers.count(layer))
                 visibleLayers.erase(layer);  // Hide layer
             else
@@ -1214,18 +1215,18 @@ int main()
                 }
         
                 ImGui::Text("Editing ID: %d", selected->id);
-                
+
                 static std::unordered_map<int, glm::vec3> moveStartPositions;
-                const glm::vec3 currentPosition(selected->x, selected->y, selected->z);
 
                 // Capture the full position before any one axis starts changing.
+                const glm::vec3 xPositionBeforeEdit(selected->x, selected->y, selected->z);
                 ImGui::InputFloat("X", &selected->x);
                 if (ImGui::IsItemActivated()) {
-                    moveStartPositions[selected->id] = currentPosition;
+                    moveStartPositions[selected->id] = xPositionBeforeEdit;
                 }
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     const glm::vec3 oldPosition = moveStartPositions.count(selected->id)
-                        ? moveStartPositions[selected->id] : currentPosition;
+                        ? moveStartPositions[selected->id] : xPositionBeforeEdit;
                     const glm::vec3 newPosition(selected->x, selected->y, selected->z);
                     commandHistory.push(std::make_unique<MoveComponentCommand>(
                         graph, selected->id, oldPosition, newPosition));
@@ -1233,13 +1234,14 @@ int main()
                 }
 
                 // Y uses the same command path so each completed axis edit is undoable.
+                const glm::vec3 yPositionBeforeEdit(selected->x, selected->y, selected->z);
                 ImGui::InputFloat("Y", &selected->y);
                 if (ImGui::IsItemActivated()) {
-                    moveStartPositions[selected->id] = currentPosition;
+                    moveStartPositions[selected->id] = yPositionBeforeEdit;
                 }
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     const glm::vec3 oldPosition = moveStartPositions.count(selected->id)
-                        ? moveStartPositions[selected->id] : currentPosition;
+                        ? moveStartPositions[selected->id] : yPositionBeforeEdit;
                     const glm::vec3 newPosition(selected->x, selected->y, selected->z);
                     commandHistory.push(std::make_unique<MoveComponentCommand>(
                         graph, selected->id, oldPosition, newPosition));
@@ -1247,13 +1249,14 @@ int main()
                 }
 
                 // Z completes the position editor without introducing a separate command class.
+                const glm::vec3 zPositionBeforeEdit(selected->x, selected->y, selected->z);
                 ImGui::InputFloat("Z", &selected->z);
                 if (ImGui::IsItemActivated()) {
-                    moveStartPositions[selected->id] = currentPosition;
+                    moveStartPositions[selected->id] = zPositionBeforeEdit;
                 }
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     const glm::vec3 oldPosition = moveStartPositions.count(selected->id)
-                        ? moveStartPositions[selected->id] : currentPosition;
+                        ? moveStartPositions[selected->id] : zPositionBeforeEdit;
                     const glm::vec3 newPosition(selected->x, selected->y, selected->z);
                     commandHistory.push(std::make_unique<MoveComponentCommand>(
                         graph, selected->id, oldPosition, newPosition));
@@ -1263,13 +1266,14 @@ int main()
                 static std::unordered_map<int, int> layerStartValues;
 
                 // Capture the old layer before ImGui mutates the integer live.
+                const int layerBeforeEdit = selected->layer;
                 ImGui::InputInt("Layer", &selected->layer);
                 if (ImGui::IsItemActivated()) {
-                    layerStartValues[selected->id] = selected->layer;
+                    layerStartValues[selected->id] = layerBeforeEdit;
                 }
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     const int oldLayer = layerStartValues.count(selected->id)
-                        ? layerStartValues[selected->id] : selected->layer;
+                        ? layerStartValues[selected->id] : layerBeforeEdit;
                     const int newLayerValue = selected->layer;
 
                     // Layer is an int field, so it has its own narrow command.
