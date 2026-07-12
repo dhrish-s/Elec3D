@@ -474,9 +474,8 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
     if (USE_GPU_INSTANCING && USE_COMPONENT_MESHES) {
         // Group every visible component's per-instance data by mesh-registry
         // key, using the exact same model/color logic as the non-instanced
-        // loop below (voltage-to-color mix, hover highlight, Y rotation).
+        // loop below (voltage-to-color mix, hover highlight).
         std::map<std::string, std::vector<InstanceData>> grouped;
-        const float angle = (float)glfwGetTime();
         for (const auto& c : graph.components) {
             if (visibleLayers.count(c.layer) == 0) continue;
             glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
@@ -489,7 +488,6 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
             }
 
             glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
-            model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
 
             const std::string key = (m_meshRegistry.count(c.type) > 0) ? c.type : std::string("Cube");
             InstanceData inst;
@@ -533,9 +531,7 @@ void Renderer::draw(const CircuitGraph& graph, const Camera& camera,
                 glUniform1f(brightnessLoc, pulse);
             }
 
-            float angle = (float)glfwGetTime();
             glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
-            model = glm::rotate(model, angle, glm::vec3(0.0f, 1.0f, 0.0f));
             if (USE_COMPONENT_MESHES) {
                 const std::string& key = c.type;
                 const Mesh& mesh = (m_meshRegistry.count(key) > 0)

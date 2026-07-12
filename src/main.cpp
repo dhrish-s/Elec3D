@@ -72,6 +72,9 @@ std::vector<float> transientResult;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
+    // Keep these in sync so screenPosToWorldRay() matches the real window size after a resize.
+    screenWidth = width;
+    screenHeight = height;
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -567,31 +570,38 @@ int main()
 
         glm::vec3 rayDir = camera.screenPosToWorldRay(static_cast<float>(mouseX), static_cast<float>(mouseY), static_cast<float>(screenWidth), static_cast<float>(screenHeight));
         glm::vec3 rayOrigin = camera.getPosition();  // Camera position
-        
+
+        const bool imguiWantsMouse =
+            ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
+
         hoverComponentId = -1;  // Reset hover ID
         float closestT = 1e6;  // Initialize to a large value
 
-        for (const auto& c:components)
-        {
-            if (visibleLayers.count(c.layer) == 0) continue;  // Skip invisible layers
+        // Skip raycasting while the cursor is over an ImGui panel so hover/tooltip
+        // never reports a component "underneath" UI that's actually on top of it.
+        if (!imguiWantsMouse) {
+            for (const auto& c:components)
+            {
+                if (visibleLayers.count(c.layer) == 0) continue;  // Skip invisible layers
 
-            glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
-            glm::vec3 scale(1.0f);
+                glm::vec3 pos(c.x, c.y + c.layer * 1.0f, c.z);
+                glm::vec3 scale(1.0f);
 
-            if (c.type == "Resistor")    scale = glm::vec3(1.0f, 0.5f, 0.5f);
-            else if (c.type == "Capacitor") scale = glm::vec3(0.7f, 1.0f, 0.7f);
-            else if (c.type == "Inductor")  scale = glm::vec3(1.2f, 1.2f, 1.2f);
-            else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
+                if (c.type == "Resistor")    scale = glm::vec3(1.0f, 0.5f, 0.5f);
+                else if (c.type == "Capacitor") scale = glm::vec3(0.7f, 1.0f, 0.7f);
+                else if (c.type == "Inductor")  scale = glm::vec3(1.2f, 1.2f, 1.2f);
+                else if (c.type == "Diode")     scale = glm::vec3(0.5f, 0.5f, 1.5f);
 
-            glm::vec3 halfExtents = scale * 0.5f;  // Half extents for AABB
-            glm::vec3 boxMin = pos - halfExtents;
-            glm::vec3 boxMax = pos + halfExtents;
+                glm::vec3 halfExtents = scale * 0.5f;  // Half extents for AABB
+                glm::vec3 boxMin = pos - halfExtents;
+                glm::vec3 boxMax = pos + halfExtents;
 
-            float t;
-            if (RayIntersectsAABB(rayOrigin, rayDir, boxMin, boxMax, t)) {
-                if (t < closestT) {
-                    closestT = t;
-                    hoverComponentId = c.id;  // Store the ID of the hovered component
+                float t;
+                if (RayIntersectsAABB(rayOrigin, rayDir, boxMin, boxMax, t)) {
+                    if (t < closestT) {
+                        closestT = t;
+                        hoverComponentId = c.id;  // Store the ID of the hovered component
+                    }
                 }
             }
         }
@@ -601,8 +611,6 @@ int main()
         static bool wasPressOverImGui = false;
         bool isMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 
-        const bool imguiWantsMouse =
-            ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
         if (isMouseDown && !wasMouseDown) {
             // Remember the press origin so closing a popup cannot leak its release into viewport selection.
             wasPressOverImGui = imguiWantsMouse;
@@ -624,14 +632,6 @@ int main()
         renderer.draw(renderGraph, camera, aspectRatio, static_cast<float>(glfwGetTime()));
 
         glDisable(GL_DEPTH_TEST); // Important: Disable depth test before ImGui draw
-
-        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(300, 100), ImGuiCond_Always);
-        ImGui::Begin("DEBUG TEST WINDOW", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
-        ImGui::Text("If you see this, ImGui is working");
-        ImGui::Text("Camera Yaw: %.1f", camera.getYaw());
-        ImGui::Text("Camera Pitch: %.1f", camera.getPitch());
-        ImGui::End();
 
         // Layer Control Window
         std::set<int> allLayers;
@@ -1078,11 +1078,6 @@ int main()
             ImGui::End();
 
 
-
-        bool show_demo = true;
-        ImGui::ShowDemoWindow(&show_demo);
-        
-        // All your ImGui windows...
 
         // === Tooltip for Hovered Component ===
         if (hoverComponentId != -1) {
